@@ -51,6 +51,7 @@
 
   .live-status{
     font-size: 11.5px; color: var(--text-dim); padding: 0 8px 8px; white-space:nowrap;
+    display:flex; align-items:center; gap:10px;
   }
   .live-dot{
     display:inline-block; width:7px; height:7px; border-radius:50%;
@@ -58,6 +59,29 @@
   }
   .live-dot.stale{ background:#F0C24B; box-shadow:0 0 6px #F0C24B; }
   .live-dot.err{ background:#E74C3C; box-shadow:0 0 6px #E74C3C; }
+  .refresh-btn{
+    font-size: 12px; font-weight:bold; color: #fff; background: var(--overview);
+    border:none; padding: 6px 12px; border-radius: 3px; cursor:pointer;
+  }
+  .refresh-btn:hover{ background: #123a75; }
+  .refresh-btn:disabled{ opacity: 0.6; cursor: default; }
+  .refresh-btn.spinning{ animation: spin-fade 0.9s linear infinite; }
+  @keyframes spin-fade{ 50%{ opacity: 0.55; } }
+
+  .filter-bar{
+    display:flex; align-items:center; gap: 10px; padding: 12px 16px;
+    background:#F4F6F9; border-bottom: 1px solid var(--border);
+  }
+  .filter-bar label{ font-size: 12.5px; font-weight:bold; color: var(--text-dim); }
+  .filter-bar select{
+    font-size: 13px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px;
+    background:#fff; color: var(--text); min-width: 220px;
+  }
+  .filter-bar .filter-count{ font-size: 12px; color: var(--text-dim); }
+  .filter-bar .filter-clear{
+    font-size: 12px; color: var(--overview); cursor:pointer; text-decoration: underline;
+    text-underline-offset: 2px; display:none;
+  }
 
   .panel{ display:none; padding: 0 0 18px; }
   .panel.active{ display:block; }
@@ -114,7 +138,10 @@
       <div class="tab" data-tab="orange">🟠 16 a 50 dias</div>
       <div class="tab" data-tab="red">🔴 Acima de 50 dias</div>
     </div>
-    <div class="live-status" id="liveStatus"><span class="live-dot" id="liveDot"></span>conectando…</div>
+    <div class="live-status" id="liveStatus">
+      <button class="refresh-btn" id="refreshBtn" title="Buscar dados mais recentes agora">🔄 Atualizar</button>
+      <span><span class="live-dot" id="liveDot"></span><span id="liveText">conectando…</span></span>
+    </div>
   </div>
 
   <div id="content">
@@ -130,20 +157,18 @@ const BAND_ORDER = ['green','yellow','orange','red'];
 
 let currentTab = 'overview';
 let lastData = null;
+// responsável selecionado em cada aba de faixa ('' = todos)
+const bandFilter = {green:'', yellow:'', orange:'', red:''};
 
-function render(DATA){
-  lastData = DATA;
-  const content = document.getElementById('content');
-
+function renderOverview(DATA){
   let html = `
-    <div class="panel active" id="panel-overview">
-      <div class="titlebar overview">📊 Visão Geral — Chamados Service Desk SUPORTE por Faixa  |  ${DATA.report_date.split(' ')[0]}</div>
-      <table>
-        <thead><tr>
-          <th style="text-align:left;">Faixa</th><th>Qtd</th><th>% do Total</th>
-          <th>Mais Antigo (d)</th><th>Mais Recente (d)</th><th>Média (d)</th><th>Sem Responsável</th>
-        </tr></thead>
-        <tbody>`;
+    <div class="titlebar overview">📊 Visão Geral — Chamados Service Desk SUPORTE por Faixa  |  ${DATA.report_date.split(' ')[0]}</div>
+    <table>
+      <thead><tr>
+        <th style="text-align:left;">Faixa</th><th>Qtd</th><th>% do Total</th>
+        <th>Mais Antigo (d)</th><th>Mais Recente (d)</th><th>Média (d)</th><th>Sem Responsável</th>
+      </tr></thead>
+      <tbody>`;
   DATA.overview_rows.forEach(r => {
     html += `<tr class="${BAND_ROWCLASS[r.band]}">
       <td class="left">${r.label}</td><td class="qtd">${r.qtd}</td>
@@ -165,32 +190,80 @@ function render(DATA){
       <td>${r.green}</td><td>${r.yellow}</td><td>${r.orange}</td><td>${r.red}</td>
       <td style="font-weight:bold;">${r.total}</td><td>${(r.pct*100).toFixed(1)}%</td></tr>`;
   });
-  html += `</tbody></table></div>`;
+  html += `</tbody></table>`;
+  return html;
+}
 
-  BAND_ORDER.forEach(band => {
-    const rows = DATA.band_sheets[band];
-    const label = DATA.band_label[band];
-    html += `<div class="panel" id="panel-${band}">
-      <div class="titlebar ${BAND_TITLECLASS[band]}">${label}  —  ${rows.length} chamado(s)  |  ${DATA.report_date.split(' ')[0]}</div>
-      <div class="scrollwrap"><table>
-      <thead><tr>
-        <th>Chave</th><th>Tipo</th><th style="text-align:left;">Resumo</th><th>Status</th>
-        <th>Prioridade</th><th style="text-align:left;">Responsável</th>
-        <th style="text-align:left;">Solicitante</th><th>Criado em</th><th>Últ. Atualiz.</th><th>Dias Aberto</th>
-      </tr></thead><tbody>`;
-    rows.forEach((r,i) => {
-      html += `<tr class="${i % 2 === 0 ? 'row-a' : 'row-b'}">
-        <td>${r.key}</td><td>${r.tipo}</td><td class="left">${r.resumo}</td><td>${r.status}</td>
-        <td>${r.prioridade}</td><td class="left">${r.responsavel}</td>
-        <td class="left">${r.solicitante}</td><td>${r.criado_em}</td><td>${r.atualizado_em}</td>
-        <td class="${BAND_DAYSCLASS[band]}">${r.dias_aberto}</td></tr>`;
+function renderBandPanel(DATA, band){
+  const allRows = DATA.band_sheets[band];
+  const label = DATA.band_label[band];
+  const responsaveis = [...new Set(allRows.map(r => r.responsavel))].sort((a,b) => a.localeCompare(b));
+  const selected = bandFilter[band];
+  const rows = selected ? allRows.filter(r => r.responsavel === selected) : allRows;
+
+  let html = `<div class="titlebar ${BAND_TITLECLASS[band]}">${label}  —  ${allRows.length} chamado(s)  |  ${DATA.report_date.split(' ')[0]}</div>
+    <div class="filter-bar">
+      <label for="filter-${band}">Responsável:</label>
+      <select id="filter-${band}" data-band="${band}" class="band-filter-select">
+        <option value="">Todos (${allRows.length})</option>
+        ${responsaveis.map(name => {
+          const count = allRows.filter(r => r.responsavel === name).length;
+          const sel = name === selected ? 'selected' : '';
+          return `<option value="${name.replace(/"/g,'&quot;')}" ${sel}>${name} (${count})</option>`;
+        }).join('')}
+      </select>
+      <span class="filter-count">${rows.length} de ${allRows.length} chamado(s)</span>
+      <span class="filter-clear" data-band="${band}" style="${selected ? 'display:inline;' : ''}">limpar</span>
+    </div>
+    <div class="scrollwrap"><table>
+    <thead><tr>
+      <th>Chave</th><th>Tipo</th><th style="text-align:left;">Resumo</th><th>Status</th>
+      <th>Prioridade</th><th style="text-align:left;">Responsável</th>
+      <th style="text-align:left;">Solicitante</th><th>Criado em</th><th>Últ. Atualiz.</th><th>Dias Aberto</th>
+    </tr></thead><tbody>`;
+  rows.forEach((r,i) => {
+    html += `<tr class="${i % 2 === 0 ? 'row-a' : 'row-b'}">
+      <td>${r.key}</td><td>${r.tipo}</td><td class="left">${r.resumo}</td><td>${r.status}</td>
+      <td>${r.prioridade}</td><td class="left">${r.responsavel}</td>
+      <td class="left">${r.solicitante}</td><td>${r.criado_em}</td><td>${r.atualizado_em}</td>
+      <td class="${BAND_DAYSCLASS[band]}">${r.dias_aberto}</td></tr>`;
+  });
+  html += `</tbody></table></div>`;
+  return html;
+}
+
+function wireBandFilterEvents(){
+  document.querySelectorAll('.band-filter-select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const band = e.target.dataset.band;
+      bandFilter[band] = e.target.value;
+      document.getElementById('panel-' + band).innerHTML = renderBandPanel(lastData, band);
+      wireBandFilterEvents();
     });
-    html += `</tbody></table></div></div>`;
+  });
+  document.querySelectorAll('.filter-clear').forEach(el => {
+    el.addEventListener('click', (e) => {
+      const band = e.target.dataset.band;
+      bandFilter[band] = '';
+      document.getElementById('panel-' + band).innerHTML = renderBandPanel(lastData, band);
+      wireBandFilterEvents();
+    });
+  });
+}
+
+function render(DATA){
+  lastData = DATA;
+  const content = document.getElementById('content');
+
+  let html = `<div class="panel active" id="panel-overview">${renderOverview(DATA)}</div>`;
+  BAND_ORDER.forEach(band => {
+    html += `<div class="panel" id="panel-${band}">${renderBandPanel(DATA, band)}</div>`;
   });
 
   content.innerHTML = html;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + currentTab).classList.add('active');
+  wireBandFilterEvents();
 }
 
 document.getElementById('tabbar').addEventListener('click', (e) => {
@@ -204,9 +277,11 @@ document.getElementById('tabbar').addEventListener('click', (e) => {
   if (panel) panel.classList.add('active');
 });
 
-async function loadData(){
+async function loadData(manual){
   const dot = document.getElementById('liveDot');
-  const status = document.getElementById('liveStatus');
+  const text = document.getElementById('liveText');
+  const btn = document.getElementById('refreshBtn');
+  if (manual){ btn.disabled = true; btn.classList.add('spinning'); }
   try{
     const res = await fetch('/api/data', {cache: 'no-store'});
     if (!res.ok){
@@ -216,16 +291,20 @@ async function loadData(){
     const data = await res.json();
     render(data);
     dot.className = 'live-dot';
-    status.innerHTML = `<span class="live-dot" id="liveDot"></span>atualizado às ${data.report_date.split(' ')[1] || ''}`;
+    text.textContent = `atualizado às ${data.report_date.split(' ')[1] || ''}`;
   } catch(e){
     if (!lastData){
       document.getElementById('content').innerHTML =
         `<div class="error-box">Não foi possível carregar os dados: ${e.message}</div>`;
     }
-    document.getElementById('liveStatus').innerHTML =
-      `<span class="live-dot err"></span>erro ao atualizar (mantendo última versão)`;
+    dot.className = 'live-dot err';
+    text.textContent = 'erro ao atualizar (mantendo última versão)';
+  } finally {
+    if (manual){ btn.disabled = false; btn.classList.remove('spinning'); }
   }
 }
+
+document.getElementById('refreshBtn').addEventListener('click', () => loadData(true));
 
 loadData();
 setInterval(loadData, 60000); // repolla a cada 60s no navegador
