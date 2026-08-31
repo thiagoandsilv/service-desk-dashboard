@@ -71,11 +71,12 @@
   .filter-bar{
     display:flex; align-items:center; gap: 10px; padding: 12px 16px;
     background:#F4F6F9; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
   }
   .filter-bar label{ font-size: 12.5px; font-weight:bold; color: var(--text-dim); }
   .filter-bar select{
     font-size: 13px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px;
-    background:#fff; color: var(--text); min-width: 220px;
+    background:#fff; color: var(--text); min-width: 180px; max-width: 260px;
   }
   .filter-bar .filter-count{ font-size: 12px; color: var(--text-dim); }
   .filter-bar .filter-clear{
@@ -161,8 +162,9 @@ const BAND_ORDER = ['green','yellow','orange','red'];
 
 let currentTab = 'overview';
 let lastData = null;
-// responsável selecionado em cada aba de faixa ('' = todos)
+// filtros selecionados em cada aba de faixa ('' = todos)
 const bandFilter = {green:'', yellow:'', orange:'', red:''};
+const statusFilter = {green:'', yellow:'', orange:'', red:''};
 
 function jiraLink(DATA, key){
   const base = (DATA.jira_base_url || '').replace(/\/$/, '');
@@ -208,22 +210,35 @@ function renderBandPanel(DATA, band){
   const allRows = DATA.band_sheets[band];
   const label = DATA.band_label[band];
   const responsaveis = [...new Set(allRows.map(r => r.responsavel))].sort((a,b) => a.localeCompare(b));
-  const selected = bandFilter[band];
-  const rows = selected ? allRows.filter(r => r.responsavel === selected) : allRows;
+  const statuses = [...new Set(allRows.map(r => r.status))].sort((a,b) => a.localeCompare(b));
+  const selResp = bandFilter[band];
+  const selStatus = statusFilter[band];
+  const rows = allRows.filter(r =>
+    (!selResp || r.responsavel === selResp) && (!selStatus || r.status === selStatus));
+  const anyFilterActive = selResp || selStatus;
 
   let html = `<div class="titlebar ${BAND_TITLECLASS[band]}">${label}  —  ${allRows.length} chamado(s)  |  ${DATA.report_date.split(' ')[0]}</div>
     <div class="filter-bar">
-      <label for="filter-${band}">Responsável:</label>
-      <select id="filter-${band}" data-band="${band}" class="band-filter-select">
+      <label for="filter-resp-${band}">Responsável:</label>
+      <select id="filter-resp-${band}" data-band="${band}" class="band-filter-select">
         <option value="">Todos (${allRows.length})</option>
         ${responsaveis.map(name => {
           const count = allRows.filter(r => r.responsavel === name).length;
-          const sel = name === selected ? 'selected' : '';
+          const sel = name === selResp ? 'selected' : '';
           return `<option value="${name.replace(/"/g,'&quot;')}" ${sel}>${name} (${count})</option>`;
         }).join('')}
       </select>
+      <label for="filter-status-${band}">Status:</label>
+      <select id="filter-status-${band}" data-band="${band}" class="status-filter-select">
+        <option value="">Todos (${allRows.length})</option>
+        ${statuses.map(st => {
+          const count = allRows.filter(r => r.status === st).length;
+          const sel = st === selStatus ? 'selected' : '';
+          return `<option value="${st.replace(/"/g,'&quot;')}" ${sel}>${st} (${count})</option>`;
+        }).join('')}
+      </select>
       <span class="filter-count">${rows.length} de ${allRows.length} chamado(s)</span>
-      <span class="filter-clear" data-band="${band}" style="${selected ? 'display:inline;' : ''}">limpar</span>
+      <span class="filter-clear" data-band="${band}" style="${anyFilterActive ? 'display:inline;' : ''}">limpar filtros</span>
     </div>
     <div class="scrollwrap"><table>
     <thead><tr>
@@ -251,10 +266,19 @@ function wireBandFilterEvents(){
       wireBandFilterEvents();
     });
   });
+  document.querySelectorAll('.status-filter-select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const band = e.target.dataset.band;
+      statusFilter[band] = e.target.value;
+      document.getElementById('panel-' + band).innerHTML = renderBandPanel(lastData, band);
+      wireBandFilterEvents();
+    });
+  });
   document.querySelectorAll('.filter-clear').forEach(el => {
     el.addEventListener('click', (e) => {
       const band = e.target.dataset.band;
       bandFilter[band] = '';
+      statusFilter[band] = '';
       document.getElementById('panel-' + band).innerHTML = renderBandPanel(lastData, band);
       wireBandFilterEvents();
     });
