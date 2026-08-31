@@ -2,16 +2,14 @@
 """
 jira_client.py
 ---------------
-Busca chamados no Jira Cloud (API REST v3) e converte cada issue no
-formato usado por report_builder.IssueRow.
+Busca chamados no Jira Cloud (API REST v3).
 
 Autenticação: e-mail + API Token do Jira Cloud
   → Gerar em: https://id.atlassian.com/manage-profile/security/api-tokens
 
-Uso típico (ver main.py):
+Uso típico (ver jira_sync.py):
     client = JiraClient(base_url, email, api_token)
     issues = client.fetch_open_issues(project_key="SUPORTE")
-    rows = [normalize_issue(i, report_date) for i in issues]
 """
 from __future__ import annotations
 
@@ -20,8 +18,6 @@ from dataclasses import dataclass
 from typing import Any, Iterator
 
 import requests
-
-from report_builder import IssueRow
 
 FIELDS = [
     "summary", "issuetype", "status", "priority",
@@ -180,34 +176,4 @@ def compute_response_time_metrics(created: dt.datetime,
         data_1a_atribuicao=data_1a_atribuicao,
         data_1a_troca_responsavel=data_1a_troca,
         data_finalizacao=data_final,
-    )
-
-
-def normalize_issue(issue: dict[str, Any], report_date: dt.datetime) -> IssueRow:
-    fields = issue["fields"]
-
-    assignee = fields.get("assignee")
-    responsavel = assignee["displayName"] if assignee else "Não atribuído"
-
-    reporter = fields.get("reporter")
-    if reporter:
-        solicitante = reporter.get("displayName") or reporter.get("emailAddress") or "Desconhecido"
-    else:
-        solicitante = "Desconhecido"
-
-    criado_em = _parse_jira_datetime(fields.get("created"))
-    atualizado_em = _parse_jira_datetime(fields.get("updated"))
-    dias_aberto = max((report_date - criado_em).days, 0)
-
-    return IssueRow(
-        key=issue["key"],
-        tipo=(fields.get("issuetype") or {}).get("name", ""),
-        resumo=fields.get("summary", ""),
-        status=(fields.get("status") or {}).get("name", ""),
-        prioridade=(fields.get("priority") or {}).get("name", "—"),
-        responsavel=responsavel,
-        solicitante=solicitante,
-        criado_em=criado_em,
-        atualizado_em=atualizado_em,
-        dias_aberto=dias_aberto,
     )
