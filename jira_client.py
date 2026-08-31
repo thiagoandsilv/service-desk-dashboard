@@ -44,11 +44,18 @@ class JiraClient:
 
     # ------------------------------------------------------------------
     def fetch_open_issues(self, project_key: str,
-                           extra_jql: str = "") -> Iterator[dict[str, Any]]:
+                           extra_jql: str = "",
+                           max_pages: int = 10) -> Iterator[dict[str, Any]]:
         """Gera (yield) cada issue em aberto do projeto, paginando
         automaticamente via nextPageToken (API de busca atual do Jira Cloud).
+
+        max_pages é um limite de segurança (10 páginas x 100 = até 1000
+        issues) para nunca puxar um histórico gigante por engano caso a
+        JQL de filtro de "aberto" mude e volte a casar com chamados
+        antigos já fechados — isso já causou estouro de memória em
+        produção uma vez.
         """
-        jql = f"project = {project_key} AND resolution = Unresolved"
+        jql = f"project = {project_key} AND statusCategory != Done"
         if extra_jql:
             jql += f" AND {extra_jql}"
         jql += " ORDER BY created ASC"
@@ -61,6 +68,7 @@ class JiraClient:
         }
 
         next_token = None
+        pages_fetched = 0
         while True:
             body = dict(payload)
             if next_token:
@@ -74,7 +82,10 @@ class JiraClient:
             for issue in data.get("issues", []):
                 yield issue
             next_token = data.get("nextPageToken")
+            pages_fetched += 1
             if not next_token or data.get("isLast", not next_token):
+                break
+            if pages_fetched >= max_pages:
                 break
 
 
