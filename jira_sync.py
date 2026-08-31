@@ -108,6 +108,7 @@ def fetch_dashboard_data() -> dict:
 
     return {
         "report_date": report_date.strftime("%d/%m/%Y %H:%M:%S"),
+        "jira_base_url": base_url,
         "total": total,
         "overview_rows": overview_rows,
         "sem_resp_total": sem_resp_total,
