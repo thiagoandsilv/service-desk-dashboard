@@ -291,9 +291,11 @@ async function loadData(manual){
   const dot = document.getElementById('liveDot');
   const text = document.getElementById('liveText');
   const btn = document.getElementById('refreshBtn');
+  const prevReportDate = lastData ? lastData.report_date : null;
   if (manual){ btn.disabled = true; btn.classList.add('spinning'); }
   try{
-    const res = await fetch('/api/data', {cache: 'no-store'});
+    const url = manual ? '/api/data?force=1' : '/api/data';
+    const res = await fetch(url, {cache: 'no-store'});
     if (!res.ok){
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || ('HTTP ' + res.status));
@@ -301,7 +303,10 @@ async function loadData(manual){
     const data = await res.json();
     render(data);
     dot.className = 'live-dot';
-    text.textContent = `atualizado às ${data.report_date.split(' ')[1] || ''}`;
+    const sameAsBefore = manual && prevReportDate && prevReportDate === data.report_date;
+    text.textContent = sameAsBefore
+      ? `sem novidades no Jira (checado às ${data.report_date.split(' ')[1] || ''})`
+      : `atualizado às ${data.report_date.split(' ')[1] || ''}`;
   } catch(e){
     if (!lastData){
       document.getElementById('content').innerHTML =
