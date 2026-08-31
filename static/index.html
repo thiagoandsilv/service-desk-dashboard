@@ -123,6 +123,10 @@
   .meta{ padding: 10px 16px; font-size: 11.5px; color: var(--text-dim); text-align:right;
     background:#F4F6F9; border-top: 1px solid var(--border); }
   .resp-cell{ text-align:left; }
+  .chamado-link{
+    color: var(--overview); text-decoration: none; font-weight: bold;
+  }
+  .chamado-link:hover{ text-decoration: underline; }
   .loading, .error-box{ padding: 40px; text-align:center; color: var(--text-dim); }
   .error-box{ color: var(--red-font); }
 </style>
@@ -159,6 +163,12 @@ let currentTab = 'overview';
 let lastData = null;
 // responsável selecionado em cada aba de faixa ('' = todos)
 const bandFilter = {green:'', yellow:'', orange:'', red:''};
+
+function jiraLink(DATA, key){
+  const base = (DATA.jira_base_url || '').replace(/\/$/, '');
+  if (!base) return key;
+  return `<a class="chamado-link" href="${base}/browse/${key}" target="_blank" rel="noopener noreferrer">${key}</a>`;
+}
 
 function renderOverview(DATA){
   let html = `
@@ -217,13 +227,13 @@ function renderBandPanel(DATA, band){
     </div>
     <div class="scrollwrap"><table>
     <thead><tr>
-      <th>Chave</th><th>Tipo</th><th style="text-align:left;">Resumo</th><th>Status</th>
+      <th>Chamado</th><th>Tipo</th><th style="text-align:left;">Resumo</th><th>Status</th>
       <th>Prioridade</th><th style="text-align:left;">Responsável</th>
       <th style="text-align:left;">Solicitante</th><th>Criado em</th><th>Últ. Atualiz.</th><th>Dias Aberto</th>
     </tr></thead><tbody>`;
   rows.forEach((r,i) => {
     html += `<tr class="${i % 2 === 0 ? 'row-a' : 'row-b'}">
-      <td>${r.key}</td><td>${r.tipo}</td><td class="left">${r.resumo}</td><td>${r.status}</td>
+      <td>${jiraLink(DATA, r.key)}</td><td>${r.tipo}</td><td class="left">${r.resumo}</td><td>${r.status}</td>
       <td>${r.prioridade}</td><td class="left">${r.responsavel}</td>
       <td class="left">${r.solicitante}</td><td>${r.criado_em}</td><td>${r.atualizado_em}</td>
       <td class="${BAND_DAYSCLASS[band]}">${r.dias_aberto}</td></tr>`;
