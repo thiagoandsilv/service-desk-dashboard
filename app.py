@@ -20,29 +20,37 @@ import threading
 import time
 import traceback
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 
 from jira_sync import fetch_dashboard_data
 
 app = Flask(__name__, static_folder="static")
 
 REFRESH_SECONDS = int(os.environ.get("REFRESH_SECONDS", "300"))
+# Cooldown mínimo entre buscas forçadas (botão "Atualizar"), pra ninguém
+# conseguir martelar o botão e sobrecarregar a API do Jira.
+FORCE_REFRESH_COOLDOWN = int(os.environ.get("FORCE_REFRESH_COOLDOWN", "15"))
 
 _cache_lock = threading.Lock()
 _cache = {"data": None, "fetched_at": 0.0, "error": None}
+_refresh_in_progress = threading.Lock()
 
 
 def _refresh_cache():
-    try:
-        data = fetch_dashboard_data()
-        with _cache_lock:
-            _cache["data"] = data
-            _cache["fetched_at"] = time.time()
-            _cache["error"] = None
-    except Exception as e:
-        traceback.print_exc()
-        with _cache_lock:
-            _cache["error"] = str(e)
+    # Evita duas buscas simultâneas (ex: refresh automático e botão
+    # "Atualizar" clicados ao mesmo tempo) — a segunda só espera a
+    # primeira terminar e aproveita o resultado dela.
+    with _refresh_in_progress:
+        try:
+            data = fetch_dashboard_data()
+            with _cache_lock:
+                _cache["data"] = data
+                _cache["fetched_at"] = time.time()
+                _cache["error"] = None
+        except Exception as e:
+            traceback.print_exc()
+            with _cache_lock:
+                _cache["error"] = str(e)
 
 
 def _background_refresher():
@@ -58,13 +66,18 @@ def index():
 
 @app.route("/api/data")
 def api_data():
+    force = request.args.get("force") == "1"
+
     with _cache_lock:
         data = _cache["data"]
         error = _cache["error"]
         fetched_at = _cache["fetched_at"]
 
     # Primeira chamada, ainda sem cache: busca na hora (bloqueante) uma vez.
-    if data is None and error is None:
+    # Ou: botão "Atualizar" clicado (force=1) e já passou o cooldown mínimo
+    # desde a última busca — busca de novo na hora, ignorando o cache.
+    should_force = force and (time.time() - fetched_at) >= FORCE_REFRESH_COOLDOWN
+    if (data is None and error is None) or should_force:
         _refresh_cache()
         with _cache_lock:
             data = _cache["data"]
