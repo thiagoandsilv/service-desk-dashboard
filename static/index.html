@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Service Desk por Faixa — SUPORTE</title>
+<style>
+  :root{
+    --navy: #1F3864;
+    --overview: #0D47A1;
+    --green-title: #1E8449;
+    --yellow-title: #B8860B;
+    --orange-title: #D35400;
+    --red-title: #C0392B;
+    --row-a: #FFFFFF;
+    --row-b: #F9F9F9;
+    --green-fill: #D4EDDA; --green-font: #155724;
+    --yellow-fill: #FFF9C4; --yellow-font: #856404;
+    --orange-fill: #FFE0B2; --orange-font: #BF360C;
+    --red-fill: #FFCDD2; --red-font: #B71C1C;
+    --total-fill: #BDD7EE;
+    --border: #BFBFBF;
+    --text: #1A1A1A;
+    --text-dim: #5A5A5A;
+    --bg: #EAEEF3;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background: var(--bg); color: var(--text);
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 24px 20px 60px;
+  }
+  .sheet{ max-width: 1180px; margin: 0 auto; background: #fff; border: 1px solid var(--border); }
+  .tabbar{
+    display:flex; gap:2px; padding: 10px 10px 0; background: #DCE3EC;
+    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+    justify-content: space-between; align-items:flex-end;
+  }
+  .tabs-left{ display:flex; gap:2px; flex-wrap:wrap; }
+  .tab{
+    padding: 9px 16px; font-size: 13px; font-weight: bold; cursor:pointer;
+    background: #C9D2DF; color: #33415C; border: 1px solid var(--border); border-bottom:none;
+    border-radius: 4px 4px 0 0; user-select:none;
+  }
+  .tab.active{ background:#fff; color: var(--text); }
+  .tab[data-tab="overview"].active{ border-top: 3px solid var(--overview); }
+  .tab[data-tab="green"].active{ border-top: 3px solid var(--green-title); }
+  .tab[data-tab="yellow"].active{ border-top: 3px solid var(--yellow-title); }
+  .tab[data-tab="orange"].active{ border-top: 3px solid var(--orange-title); }
+  .tab[data-tab="red"].active{ border-top: 3px solid var(--red-title); }
+
+  .live-status{
+    font-size: 11.5px; color: var(--text-dim); padding: 0 8px 8px; white-space:nowrap;
+  }
+  .live-dot{
+    display:inline-block; width:7px; height:7px; border-radius:50%;
+    background:#2ECC71; margin-right:5px; box-shadow:0 0 6px #2ECC71;
+  }
+  .live-dot.stale{ background:#F0C24B; box-shadow:0 0 6px #F0C24B; }
+  .live-dot.err{ background:#E74C3C; box-shadow:0 0 6px #E74C3C; }
+
+  .panel{ display:none; padding: 0 0 18px; }
+  .panel.active{ display:block; }
+  .titlebar{ color:#fff; font-weight:bold; font-size: 15px; text-align:center; padding: 12px 16px; }
+  .titlebar.overview{ background: var(--overview); }
+  .titlebar.green{ background: var(--green-title); }
+  .titlebar.yellow{ background: var(--yellow-title); }
+  .titlebar.orange{ background: var(--orange-title); }
+  .titlebar.red{ background: var(--red-title); }
+
+  table{ width:100%; border-collapse: collapse; font-size: 12.5px; }
+  thead th{
+    background: var(--navy); color:#fff; font-weight:bold; font-size: 11.5px;
+    padding: 8px 10px; text-align:center; border: 1px solid var(--border);
+    position: sticky; top:0; z-index:1;
+  }
+  tbody td{ padding: 7px 10px; border: 1px solid var(--border); text-align:center; }
+  tbody td.left{ text-align:left; }
+  tbody tr.row-a td{ background: var(--row-a); }
+  tbody tr.row-b td{ background: var(--row-b); }
+
+  tr.ov-green td{ background: var(--green-fill); }
+  tr.ov-green td.qtd{ color: var(--green-font); font-weight:bold; }
+  tr.ov-yellow td{ background: var(--yellow-fill); }
+  tr.ov-yellow td.qtd{ color: var(--yellow-font); font-weight:bold; }
+  tr.ov-orange td{ background: var(--orange-fill); }
+  tr.ov-orange td.qtd{ color: var(--orange-font); font-weight:bold; }
+  tr.ov-red td{ background: var(--red-fill); }
+  tr.ov-red td.qtd{ color: var(--red-font); font-weight:bold; }
+  tr.ov-total td{ background: var(--total-fill); font-weight:bold; }
+
+  .subtitle{ padding: 16px 16px 6px; font-weight:bold; font-size: 13.5px; }
+  .days-green{ color: var(--green-font); font-weight:bold; }
+  .days-yellow{ color: var(--yellow-font); font-weight:bold; }
+  .days-orange{ color: var(--orange-font); font-weight:bold; }
+  .days-red{ color: var(--red-font); font-weight:bold; }
+
+  .scrollwrap{ max-height: 560px; overflow-y:auto; }
+  .meta{ padding: 10px 16px; font-size: 11.5px; color: var(--text-dim); text-align:right;
+    background:#F4F6F9; border-top: 1px solid var(--border); }
+  .resp-cell{ text-align:left; }
+  .loading, .error-box{ padding: 40px; text-align:center; color: var(--text-dim); }
+  .error-box{ color: var(--red-font); }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+  <div class="tabbar">
+    <div class="tabs-left" id="tabbar">
+      <div class="tab active" data-tab="overview">📊 Visão Geral</div>
+      <div class="tab" data-tab="green">🟢 Até 7 dias</div>
+      <div class="tab" data-tab="yellow">🟡 8 a 15 dias</div>
+      <div class="tab" data-tab="orange">🟠 16 a 50 dias</div>
+      <div class="tab" data-tab="red">🔴 Acima de 50 dias</div>
+    </div>
+    <div class="live-status" id="liveStatus"><span class="live-dot" id="liveDot"></span>conectando…</div>
+  </div>
+
+  <div id="content">
+    <div class="loading">Carregando dados do Jira…</div>
+  </div>
+</div>
+
+<script>
+const BAND_ROWCLASS = {green:'ov-green', yellow:'ov-yellow', orange:'ov-orange', red:'ov-red'};
+const BAND_DAYSCLASS = {green:'days-green', yellow:'days-yellow', orange:'days-orange', red:'days-red'};
+const BAND_TITLECLASS = {green:'green', yellow:'yellow', orange:'orange', red:'red'};
+const BAND_ORDER = ['green','yellow','orange','red'];
+
+let currentTab = 'overview';
+let lastData = null;
+
+function render(DATA){
+  lastData = DATA;
+  const content = document.getElementById('content');
+
+  let html = `
+    <div class="panel active" id="panel-overview">
+      <div class="titlebar overview">📊 Visão Geral — Chamados Service Desk SUPORTE por Faixa  |  ${DATA.report_date.split(' ')[0]}</div>
+      <table>
+        <thead><tr>
+          <th style="text-align:left;">Faixa</th><th>Qtd</th><th>% do Total</th>
+          <th>Mais Antigo (d)</th><th>Mais Recente (d)</th><th>Média (d)</th><th>Sem Responsável</th>
+        </tr></thead>
+        <tbody>`;
+  DATA.overview_rows.forEach(r => {
+    html += `<tr class="${BAND_ROWCLASS[r.band]}">
+      <td class="left">${r.label}</td><td class="qtd">${r.qtd}</td>
+      <td>${(r.pct*100).toFixed(1)}%</td><td>${r.mais_antigo}</td>
+      <td>${r.mais_recente}</td><td>${r.media}</td><td>${r.sem_resp}</td></tr>`;
+  });
+  html += `<tr class="ov-total"><td class="left">TOTAL</td><td>${DATA.total}</td><td>100%</td>
+    <td></td><td></td><td>${DATA.media_total}</td><td>${DATA.sem_resp_total}</td></tr>`;
+  html += `</tbody></table>
+      <div class="subtitle">👤 Top Responsáveis por Faixa de Tempo</div>
+      <table>
+        <thead><tr>
+          <th style="text-align:left;">Responsável</th><th>Até 7d</th><th>8-15d</th>
+          <th>16-50d</th><th>+50d</th><th>Total</th><th>% do Total</th>
+        </tr></thead><tbody>`;
+  DATA.top_responsaveis.forEach((r,i) => {
+    html += `<tr class="${i % 2 === 0 ? 'row-a' : 'row-b'}">
+      <td class="resp-cell" style="font-weight:bold;">${r.name}</td>
+      <td>${r.green}</td><td>${r.yellow}</td><td>${r.orange}</td><td>${r.red}</td>
+      <td style="font-weight:bold;">${r.total}</td><td>${(r.pct*100).toFixed(1)}%</td></tr>`;
+  });
+  html += `</tbody></table></div>`;
+
+  BAND_ORDER.forEach(band => {
+    const rows = DATA.band_sheets[band];
+    const label = DATA.band_label[band];
+    html += `<div class="panel" id="panel-${band}">
+      <div class="titlebar ${BAND_TITLECLASS[band]}">${label}  —  ${rows.length} chamado(s)  |  ${DATA.report_date.split(' ')[0]}</div>
+      <div class="scrollwrap"><table>
+      <thead><tr>
+        <th>Chave</th><th>Tipo</th><th style="text-align:left;">Resumo</th><th>Status</th>
+        <th>Prioridade</th><th style="text-align:left;">Responsável</th>
+        <th style="text-align:left;">Solicitante</th><th>Criado em</th><th>Últ. Atualiz.</th><th>Dias Aberto</th>
+      </tr></thead><tbody>`;
+    rows.forEach((r,i) => {
+      html += `<tr class="${i % 2 === 0 ? 'row-a' : 'row-b'}">
+        <td>${r.key}</td><td>${r.tipo}</td><td class="left">${r.resumo}</td><td>${r.status}</td>
+        <td>${r.prioridade}</td><td class="left">${r.responsavel}</td>
+        <td class="left">${r.solicitante}</td><td>${r.criado_em}</td><td>${r.atualizado_em}</td>
+        <td class="${BAND_DAYSCLASS[band]}">${r.dias_aberto}</td></tr>`;
+    });
+    html += `</tbody></table></div></div>`;
+  });
+
+  content.innerHTML = html;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + currentTab).classList.add('active');
+}
+
+document.getElementById('tabbar').addEventListener('click', (e) => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  currentTab = tab.dataset.tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-' + currentTab);
+  if (panel) panel.classList.add('active');
+});
+
+async function loadData(){
+  const dot = document.getElementById('liveDot');
+  const status = document.getElementById('liveStatus');
+  try{
+    const res = await fetch('/api/data', {cache: 'no-store'});
+    if (!res.ok){
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || ('HTTP ' + res.status));
+    }
+    const data = await res.json();
+    render(data);
+    dot.className = 'live-dot';
+    status.innerHTML = `<span class="live-dot" id="liveDot"></span>atualizado às ${data.report_date.split(' ')[1] || ''}`;
+  } catch(e){
+    if (!lastData){
+      document.getElementById('content').innerHTML =
+        `<div class="error-box">Não foi possível carregar os dados: ${e.message}</div>`;
+    }
+    document.getElementById('liveStatus').innerHTML =
+      `<span class="live-dot err"></span>erro ao atualizar (mantendo última versão)`;
+  }
+}
+
+loadData();
+setInterval(loadData, 60000); // repolla a cada 60s no navegador
+</script>
+</body>
+</html>

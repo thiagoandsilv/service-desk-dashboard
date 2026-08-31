@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: service-desk-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: JIRA_BASE_URL
+        sync: false
+      - key: JIRA_EMAIL
+        sync: false
+      - key: JIRA_API_TOKEN
+        sync: false
+      - key: JIRA_PROJECT
+        value: SUPORTE
+      - key: REFRESH_SECONDS
+        value: "300"
