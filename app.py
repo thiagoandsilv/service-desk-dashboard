@@ -8,19 +8,27 @@ Servidor web (Flask) para o dashboard "Service Desk por Faixa".
 - GET /api/data    -> retorna os dados mais recentes em JSON, atualizando
                        o cache automaticamente a cada REFRESH_SECONDS
                        (padrão: 300s = 5 min) para não sobrecarregar o Jira.
-- GET /api/health  -> healthcheck simples (usado pelo Render)
+- GET /api/health  -> healthcheck simples (usado pelo Render, sem autenticação)
 
-O token do Jira fica só nas variáveis de ambiente do servidor — nunca
-é enviado ao navegador de quem acessa o dashboard.
+O token do Jira, e agora também o usuário/senha de acesso ao dashboard,
+ficam só nas variáveis de ambiente do servidor — nunca hardcoded no
+código nem enviados ao navegador de quem acessa.
+
+Autenticação: HTTP Basic Auth simples, configurada via as variáveis de
+ambiente DASHBOARD_USER e DASHBOARD_PASSWORD. Se essas duas variáveis
+não estiverem definidas, o dashboard fica público sem senha (assim o
+serviço não quebra caso alguém esqueça de configurar).
 """
 from __future__ import annotations
 
+import hmac
 import os
 import threading
 import time
 import traceback
+from functools import wraps
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 from jira_sync import fetch_dashboard_data
 
@@ -31,9 +39,34 @@ REFRESH_SECONDS = int(os.environ.get("REFRESH_SECONDS", "300"))
 # conseguir martelar o botão e sobrecarregar a API do Jira.
 FORCE_REFRESH_COOLDOWN = int(os.environ.get("FORCE_REFRESH_COOLDOWN", "15"))
 
+DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "")
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
+AUTH_ENABLED = bool(DASHBOARD_USER and DASHBOARD_PASSWORD)
+
 _cache_lock = threading.Lock()
 _cache = {"data": None, "fetched_at": 0.0, "error": None}
 _refresh_in_progress = threading.Lock()
+
+
+def _check_credentials(user: str, password: str) -> bool:
+    # hmac.compare_digest evita "timing attack" (comparar string por
+    # string normal vaza informação pelo tempo de resposta).
+    return (hmac.compare_digest(user, DASHBOARD_USER)
+            and hmac.compare_digest(password, DASHBOARD_PASSWORD))
+
+
+def require_auth(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not AUTH_ENABLED:
+            return view(*args, **kwargs)
+        auth = request.authorization
+        if not auth or not _check_credentials(auth.username or "", auth.password or ""):
+            return Response(
+                "Login necessário para acessar o dashboard.", 401,
+                {"WWW-Authenticate": 'Basic realm="Service Desk Dashboard"'})
+        return view(*args, **kwargs)
+    return wrapped
 
 
 def _refresh_cache():
@@ -60,11 +93,13 @@ def _background_refresher():
 
 
 @app.route("/")
+@require_auth
 def index():
     return send_from_directory("static", "index.html")
 
 
 @app.route("/api/data")
+@require_auth
 def api_data():
     force = request.args.get("force") == "1"
 
