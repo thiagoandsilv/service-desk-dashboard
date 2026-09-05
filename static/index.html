@@ -12,6 +12,7 @@
     --yellow-title: #B8860B;
     --orange-title: #D35400;
     --red-title: #C0392B;
+    --n1-title: #6C3483;
     --row-a: #FFFFFF;
     --row-b: #F9F9F9;
     --green-fill: #D4EDDA; --green-font: #155724;
@@ -48,6 +49,7 @@
   .tab[data-tab="yellow"].active{ border-top: 3px solid var(--yellow-title); }
   .tab[data-tab="orange"].active{ border-top: 3px solid var(--orange-title); }
   .tab[data-tab="red"].active{ border-top: 3px solid var(--red-title); }
+  .tab[data-tab="n1"].active{ border-top: 3px solid var(--n1-title); }
 
   .live-status{
     font-size: 11.5px; color: var(--text-dim); padding: 0 8px 8px; white-space:nowrap;
@@ -92,6 +94,7 @@
   .titlebar.yellow{ background: var(--yellow-title); }
   .titlebar.orange{ background: var(--orange-title); }
   .titlebar.red{ background: var(--red-title); }
+  .titlebar.n1{ background: var(--n1-title); }
 
   table{ width:100%; border-collapse: collapse; font-size: 12.5px; }
   thead th{
@@ -128,6 +131,9 @@
     color: var(--overview); text-decoration: none; font-weight: bold;
   }
   .chamado-link:hover{ text-decoration: underline; }
+  .band-pill{
+    display:inline-block; width:9px; height:9px; border-radius:2px; margin-right: 6px; vertical-align:middle;
+  }
   .loading, .error-box{ padding: 40px; text-align:center; color: var(--text-dim); }
   .error-box{ color: var(--red-font); }
 </style>
@@ -142,6 +148,7 @@
       <div class="tab" data-tab="yellow">🟡 8 a 15 dias</div>
       <div class="tab" data-tab="orange">🟠 16 a 50 dias</div>
       <div class="tab" data-tab="red">🔴 Acima de 50 dias</div>
+      <div class="tab" data-tab="n1">👥 N1</div>
     </div>
     <div class="live-status" id="liveStatus">
       <button class="refresh-btn" id="refreshBtn" title="Buscar dados mais recentes agora">🔄 Atualizar</button>
@@ -157,14 +164,16 @@
 <script>
 const BAND_ROWCLASS = {green:'ov-green', yellow:'ov-yellow', orange:'ov-orange', red:'ov-red'};
 const BAND_DAYSCLASS = {green:'days-green', yellow:'days-yellow', orange:'days-orange', red:'days-red'};
-const BAND_TITLECLASS = {green:'green', yellow:'yellow', orange:'orange', red:'red'};
+const BAND_TITLECLASS = {green:'green', yellow:'yellow', orange:'orange', red:'red', n1:'n1'};
+const BAND_PILL_COLOR = {green:'#1E8449', yellow:'#B8860B', orange:'#D35400', red:'#C0392B'};
+const BAND_SHORT_LABEL = {green:'Até 7d', yellow:'8-15d', orange:'16-50d', red:'+50d'};
 const BAND_ORDER = ['green','yellow','orange','red'];
 
 let currentTab = 'overview';
 let lastData = null;
 // filtros selecionados em cada aba de faixa ('' = todos)
-const bandFilter = {green:'', yellow:'', orange:'', red:''};
-const statusFilter = {green:'', yellow:'', orange:'', red:''};
+const bandFilter = {green:'', yellow:'', orange:'', red:'', n1:''};
+const statusFilter = {green:'', yellow:'', orange:'', red:'', n1:''};
 
 function jiraLink(DATA, key){
   const base = (DATA.jira_base_url || '').replace(/\/$/, '');
@@ -216,8 +225,11 @@ function renderBandPanel(DATA, band){
   const rows = allRows.filter(r =>
     (!selResp || r.responsavel === selResp) && (!selStatus || r.status === selStatus));
   const anyFilterActive = selResp || selStatus;
+  const titleLabel = band === 'n1' && DATA.n1_users
+    ? `👥 N1 — ${DATA.n1_users.join(', ')}`
+    : label;
 
-  let html = `<div class="titlebar ${BAND_TITLECLASS[band]}">${label}  —  ${allRows.length} chamado(s)  |  ${DATA.report_date.split(' ')[0]}</div>
+  let html = `<div class="titlebar ${BAND_TITLECLASS[band]}">${titleLabel}  —  ${allRows.length} chamado(s)  |  ${DATA.report_date.split(' ')[0]}</div>
     <div class="filter-bar">
       <label for="filter-resp-${band}">Responsável:</label>
       <select id="filter-resp-${band}" data-band="${band}" class="band-filter-select">
@@ -245,13 +257,17 @@ function renderBandPanel(DATA, band){
       <th>Chamado</th><th>Tipo</th><th style="text-align:left;">Resumo</th><th>Status</th>
       <th>Prioridade</th><th style="text-align:left;">Responsável</th>
       <th style="text-align:left;">Solicitante</th><th>Criado em</th><th>Últ. Atualiz.</th><th>Dias Aberto</th>
+      ${band === 'n1' ? '<th>Faixa</th>' : ''}
     </tr></thead><tbody>`;
   rows.forEach((r,i) => {
+    const faixaCell = band === 'n1'
+      ? `<td><span class="band-pill" style="background:${BAND_PILL_COLOR[r.band] || '#999'}"></span>${BAND_SHORT_LABEL[r.band] || r.band}</td>`
+      : '';
     html += `<tr class="${i % 2 === 0 ? 'row-a' : 'row-b'}">
       <td>${jiraLink(DATA, r.key)}</td><td>${r.tipo}</td><td class="left">${r.resumo}</td><td>${r.status}</td>
       <td>${r.prioridade}</td><td class="left">${r.responsavel}</td>
       <td class="left">${r.solicitante}</td><td>${r.criado_em}</td><td>${r.atualizado_em}</td>
-      <td class="${BAND_DAYSCLASS[band]}">${r.dias_aberto}</td></tr>`;
+      <td class="${BAND_DAYSCLASS[r.band] || ''}">${r.dias_aberto}</td>${faixaCell}</tr>`;
   });
   html += `</tbody></table></div>`;
   return html;
@@ -293,6 +309,7 @@ function render(DATA){
   BAND_ORDER.forEach(band => {
     html += `<div class="panel" id="panel-${band}">${renderBandPanel(DATA, band)}</div>`;
   });
+  html += `<div class="panel" id="panel-n1">${renderBandPanel(DATA, 'n1')}</div>`;
 
   content.innerHTML = html;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
