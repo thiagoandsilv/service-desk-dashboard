@@ -85,6 +85,12 @@
     font-size: 12px; color: var(--overview); cursor:pointer; text-decoration: underline;
     text-underline-offset: 2px; display:none;
   }
+  .download-btn{
+    font-size: 12.5px; font-weight:bold; color: #fff; background: #2E7D32;
+    border:none; padding: 6px 12px; border-radius: 3px; cursor:pointer;
+    margin-left: auto;
+  }
+  .download-btn:hover{ background: #256428; }
 
   .panel{ display:none; padding: 0 0 18px; }
   .panel.active{ display:block; }
@@ -137,6 +143,7 @@
   .loading, .error-box{ padding: 40px; text-align:center; color: var(--text-dim); }
   .error-box{ color: var(--red-font); }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
 
@@ -167,6 +174,7 @@ const BAND_DAYSCLASS = {green:'days-green', yellow:'days-yellow', orange:'days-o
 const BAND_TITLECLASS = {green:'green', yellow:'yellow', orange:'orange', red:'red', n1:'n1'};
 const BAND_PILL_COLOR = {green:'#1E8449', yellow:'#B8860B', orange:'#D35400', red:'#C0392B'};
 const BAND_SHORT_LABEL = {green:'Até 7d', yellow:'8-15d', orange:'16-50d', red:'+50d'};
+const BAND_FILE_SLUG = {green:'ate-7-dias', yellow:'8-15-dias', orange:'16-50-dias', red:'acima-50-dias', n1:'N1'};
 const BAND_ORDER = ['green','yellow','orange','red'];
 
 let currentTab = 'overview';
@@ -251,6 +259,7 @@ function renderBandPanel(DATA, band){
       </select>
       <span class="filter-count">${rows.length} de ${allRows.length} chamado(s)</span>
       <span class="filter-clear" data-band="${band}" style="${anyFilterActive ? 'display:inline;' : ''}">limpar filtros</span>
+      <button class="download-btn" data-band="${band}">⬇️ Baixar Excel</button>
     </div>
     <div class="scrollwrap"><table>
     <thead><tr>
@@ -271,6 +280,116 @@ function renderBandPanel(DATA, band){
   });
   html += `</tbody></table></div>`;
   return html;
+}
+
+const BAND_FILL_HEX = {green:'D4EDDA', yellow:'FFF9C4', orange:'FFE0B2', red:'FFCDD2'};
+const BAND_FONT_HEX = {green:'155724', yellow:'856404', orange:'BF360C', red:'B71C1C'};
+const BAND_TITLE_HEX = {green:'1E8449', yellow:'B8860B', orange:'D35400', red:'C0392B', n1:'6C3483'};
+const NAVY_HEX = '1F3864';
+const ROW_A_HEX = 'FFFFFF';
+const ROW_B_HEX = 'F9F9F9';
+
+function thinBorder(){
+  const b = {style:'thin', color:{rgb:'BFBFBF'}};
+  return {top:b, bottom:b, left:b, right:b};
+}
+
+function downloadBandXLSX(DATA, band){
+  const allRows = DATA.band_sheets[band];
+  const selResp = bandFilter[band];
+  const selStatus = statusFilter[band];
+  const rows = allRows.filter(r =>
+    (!selResp || r.responsavel === selResp) && (!selStatus || r.status === selStatus));
+
+  const headers = ['Chamado', 'Tipo', 'Resumo', 'Status', 'Prioridade', 'Responsável',
+                    'Solicitante', 'Criado em', 'Últ. Atualiz.', 'Dias Aberto'];
+  if (band === 'n1') headers.push('Faixa');
+  const nCols = headers.length;
+
+  const titleLabel = band === 'n1' && DATA.n1_users
+    ? `👥 N1 — ${DATA.n1_users.join(', ')}`
+    : DATA.band_label[band];
+  const titleText = `${titleLabel}  —  ${rows.length} chamado(s)  |  ${DATA.report_date.split(' ')[0]}`;
+
+  // monta a matriz de valores: linha 1 = título (mesclado), linha 2 = cabeçalho, resto = dados
+  const aoa = [
+    [titleText, ...Array(nCols - 1).fill('')],
+    headers,
+  ];
+  rows.forEach(r => {
+    const line = [r.key, r.tipo, r.resumo, r.status, r.prioridade, r.responsavel,
+                  r.solicitante, r.criado_em, r.atualizado_em, r.dias_aberto];
+    if (band === 'n1') line.push(BAND_SHORT_LABEL[r.band] || r.band);
+    aoa.push(line);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:nCols-1}}];
+
+  const widths = band === 'n1'
+    ? [12, 14, 45, 18, 12, 22, 22, 12, 12, 10, 10]
+    : [12, 14, 45, 18, 12, 22, 22, 12, 12, 10];
+  ws['!cols'] = widths.map(w => ({wch: w}));
+  ws['!rows'] = [{hpx: 24}, {hpx: 20}];
+
+  // ---- estilo da linha de título ----
+  const titleCellRef = XLSX.utils.encode_cell({r:0, c:0});
+  ws[titleCellRef].s = {
+    fill: {fgColor:{rgb: BAND_TITLE_HEX[band] || NAVY_HEX}},
+    font: {name:'Arial', sz:13, bold:true, color:{rgb:'FFFFFF'}},
+    alignment: {horizontal:'center', vertical:'center'},
+  };
+  // preenche as demais células mescladas da linha de título com a mesma cor
+  for (let c = 1; c < nCols; c++){
+    const ref = XLSX.utils.encode_cell({r:0, c});
+    ws[ref] = ws[ref] || {t:'s', v:''};
+    ws[ref].s = { fill: {fgColor:{rgb: BAND_TITLE_HEX[band] || NAVY_HEX}} };
+  }
+
+  // ---- estilo do cabeçalho ----
+  for (let c = 0; c < nCols; c++){
+    const ref = XLSX.utils.encode_cell({r:1, c});
+    ws[ref].s = {
+      fill: {fgColor:{rgb: NAVY_HEX}},
+      font: {name:'Arial', sz:10, bold:true, color:{rgb:'FFFFFF'}},
+      alignment: {horizontal:'center', vertical:'center'},
+      border: thinBorder(),
+    };
+  }
+
+  // ---- estilo das linhas de dados ----
+  const centeredCols = new Set([0, 3, 4, 7, 8, 9, 10]); // chamado, status, prioridade, datas, dias, faixa
+  rows.forEach((r, i) => {
+    const rowIdx = 2 + i;
+    const baseFill = i % 2 === 0 ? ROW_A_HEX : ROW_B_HEX;
+    for (let c = 0; c < nCols; c++){
+      const ref = XLSX.utils.encode_cell({r: rowIdx, c});
+      const cell = ws[ref];
+      if (!cell) continue;
+      let fill = baseFill;
+      let font = {name:'Arial', sz:9, color:{rgb:'000000'}};
+      if (c === 9){ // Dias Aberto: cor pela faixa real da linha
+        font = {name:'Arial', sz:9, bold:true, color:{rgb: BAND_FONT_HEX[r.band] || '000000'}};
+      }
+      if (band === 'n1' && c === 10){ // Faixa: preenche com a cor da faixa
+        fill = BAND_FILL_HEX[r.band] || baseFill;
+        font = {name:'Arial', sz:9, bold:true, color:{rgb: BAND_FONT_HEX[r.band] || '000000'}};
+      }
+      cell.s = {
+        fill: {fgColor:{rgb: fill}},
+        font,
+        alignment: {horizontal: centeredCols.has(c) ? 'center' : 'left', vertical:'center', wrapText: c===2},
+        border: thinBorder(),
+      };
+    }
+  });
+
+  const wb = XLSX.utils.book_new();
+  const dateSlug = (DATA.report_date.split(' ')[0] || '').split('/').reverse().join('-');
+  const labelSlug = BAND_FILE_SLUG[band] || band;
+  const sheetName = (band === 'n1' ? 'N1' : (BAND_SHORT_LABEL[band] || band)).slice(0, 31);
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, `chamados_${labelSlug}_${dateSlug}.xlsx`);
 }
 
 function wireBandFilterEvents(){
@@ -297,6 +416,12 @@ function wireBandFilterEvents(){
       statusFilter[band] = '';
       document.getElementById('panel-' + band).innerHTML = renderBandPanel(lastData, band);
       wireBandFilterEvents();
+    });
+  });
+  document.querySelectorAll('.download-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const band = e.target.dataset.band;
+      downloadBandXLSX(lastData, band);
     });
   });
 }
