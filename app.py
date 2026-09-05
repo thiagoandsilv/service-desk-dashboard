@@ -95,7 +95,12 @@ def _background_refresher():
 @app.route("/")
 @require_auth
 def index():
-    return send_from_directory("static", "index.html")
+    # conditional=False + no-store: nunca deixa o navegador (ou algum proxy
+    # no meio do caminho) servir uma versão em cache do index.html via
+    # ETag/304 — já aconteceu de um deploy novo não aparecer por causa disso.
+    resp = send_from_directory("static", "index.html", conditional=False)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/api/data")
