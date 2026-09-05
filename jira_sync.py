@@ -23,6 +23,18 @@ BAND_LABEL = {
 }
 
 
+# Usuários do time N1: aparecem juntos numa aba extra, independente da
+# faixa de tempo em que cada chamado deles estiver. Configurável via
+# variável de ambiente N1_USERS (nomes separados por vírgula, exatamente
+# como aparecem no Jira), com esta lista como padrão.
+DEFAULT_N1_USERS = [
+    "Alexsander",
+    "Lucas Alexandre Brandão Lopes",
+    "Lucas Viana Hahn",
+    "Vinícius Felipe de Souza Soares",
+]
+
+
 def _band_for(dias: int) -> str:
     if dias <= 7:
         return "green"
@@ -106,6 +118,18 @@ def fetch_dashboard_data() -> dict:
             [r for r in rows if r["band"] == b],
             key=lambda r: -r["dias_aberto"])
 
+    # ---- aba extra "N1": mesmos chamados, mas cruzando todas as faixas,
+    # filtrado só pra esse grupo específico de responsáveis ----
+    n1_users_env = os.environ.get("N1_USERS", "")
+    n1_users = [u.strip() for u in n1_users_env.split(",") if u.strip()] or DEFAULT_N1_USERS
+    n1_users_set = set(n1_users)
+    band_sheets["n1"] = sorted(
+        [r for r in rows if r["responsavel"] in n1_users_set],
+        key=lambda r: -r["dias_aberto"])
+
+    band_label = dict(BAND_LABEL)
+    band_label["n1"] = "N1"
+
     return {
         "report_date": report_date.strftime("%d/%m/%Y %H:%M:%S"),
         "jira_base_url": base_url,
@@ -115,5 +139,6 @@ def fetch_dashboard_data() -> dict:
         "media_total": media_total,
         "top_responsaveis": top_resp,
         "band_sheets": band_sheets,
-        "band_label": BAND_LABEL,
+        "band_label": band_label,
+        "n1_users": n1_users,
     }
