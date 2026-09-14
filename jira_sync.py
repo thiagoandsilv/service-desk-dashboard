@@ -78,7 +78,7 @@ def fetch_dashboard_data() -> dict:
             "prioridade": (f_.get("priority") or {}).get("name", "—"),
             "responsavel": responsavel,
             "solicitante": solicitante,
-            "criado_em": criado.strftime("%d/%m/%Y"),
+            "criado_em": criado.strftime("%d/%m/%Y %H:%M"),
             "atualizado_em": atualizado.strftime("%d/%m/%Y"),
             "dias_aberto": dias,
             "band": band,
