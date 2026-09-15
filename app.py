@@ -31,6 +31,7 @@ from functools import wraps
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 from jira_sync import fetch_dashboard_data
+import history_store
 
 app = Flask(__name__, static_folder="static")
 
@@ -80,6 +81,12 @@ def _refresh_cache():
                 _cache["data"] = data
                 _cache["fetched_at"] = time.time()
                 _cache["error"] = None
+            # grava o retrato do dia no histórico; nunca deixa isso derrubar
+            # o dashboard principal se o Redis estiver fora do ar.
+            try:
+                history_store.record_snapshot(data)
+            except Exception:
+                traceback.print_exc()
         except Exception as e:
             traceback.print_exc()
             with _cache_lock:
@@ -135,6 +142,20 @@ def api_data():
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/history")
+@require_auth
+def api_history():
+    days = request.args.get("days", "30")
+    try:
+        days = max(1, min(int(days), 90))
+    except ValueError:
+        days = 30
+    history = history_store.get_history(days)
+    resp = jsonify({"history": history, "enabled": history_store.is_enabled()})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 # Inicia o refresh em background assim que o processo sobe (Gunicorn ou
