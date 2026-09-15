@@ -296,7 +296,7 @@ function renderBandPanel(DATA, band){
     <thead><tr>
       <th>Chamado</th><th>Tipo</th><th style="text-align:left;">Resumo</th><th>Status</th>
       <th>Prioridade</th><th style="text-align:left;">Responsável</th>
-      <th style="text-align:left;">Solicitante</th><th>Criado em</th><th>Últ. Atualiz.</th><th>Dias Aberto</th>
+      <th style="text-align:left;">Solicitante</th><th style="text-align:left;">Cliente</th><th>Criado em</th><th>Últ. Atualiz.</th><th>Dias Aberto</th>
       ${band === 'n1' ? '<th>Faixa</th>' : ''}
     </tr></thead><tbody>`;
   rows.forEach((r,i) => {
@@ -306,7 +306,7 @@ function renderBandPanel(DATA, band){
     html += `<tr class="${i % 2 === 0 ? 'row-a' : 'row-b'}">
       <td>${jiraLink(DATA, r.key)}</td><td>${r.tipo}</td><td class="left">${r.resumo}</td><td>${r.status}</td>
       <td>${r.prioridade}</td><td class="left">${r.responsavel}</td>
-      <td class="left">${r.solicitante}</td><td>${r.criado_em}</td><td>${r.atualizado_em}</td>
+      <td class="left">${r.solicitante}</td><td class="left">${r.cliente}</td><td>${r.criado_em}</td><td>${r.atualizado_em}</td>
       <td class="${BAND_DAYSCLASS[r.band] || ''}">${r.dias_aberto}</td>${faixaCell}</tr>`;
   });
   html += `</tbody></table></div>`;
@@ -333,7 +333,7 @@ function downloadBandXLSX(DATA, band){
     (!selResp || r.responsavel === selResp) && (!selStatus || r.status === selStatus));
 
   const headers = ['Chamado', 'Tipo', 'Resumo', 'Status', 'Prioridade', 'Responsável',
-                    'Solicitante', 'Criado em', 'Últ. Atualiz.', 'Dias Aberto'];
+                    'Solicitante', 'Cliente', 'Criado em', 'Últ. Atualiz.', 'Dias Aberto'];
   if (band === 'n1') headers.push('Faixa');
   const nCols = headers.length;
 
@@ -349,7 +349,7 @@ function downloadBandXLSX(DATA, band){
   ];
   rows.forEach(r => {
     const line = [r.key, r.tipo, r.resumo, r.status, r.prioridade, r.responsavel,
-                  r.solicitante, r.criado_em, r.atualizado_em, r.dias_aberto];
+                  r.solicitante, r.cliente, r.criado_em, r.atualizado_em, r.dias_aberto];
     if (band === 'n1') line.push(BAND_SHORT_LABEL[r.band] || r.band);
     aoa.push(line);
   });
@@ -358,8 +358,8 @@ function downloadBandXLSX(DATA, band){
   ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:nCols-1}}];
 
   const widths = band === 'n1'
-    ? [12, 14, 45, 18, 12, 22, 22, 16, 12, 10, 10]
-    : [12, 14, 45, 18, 12, 22, 22, 16, 12, 10];
+    ? [12, 14, 45, 18, 12, 22, 22, 22, 16, 12, 10, 10]
+    : [12, 14, 45, 18, 12, 22, 22, 22, 16, 12, 10];
   ws['!cols'] = widths.map(w => ({wch: w}));
   ws['!rows'] = [{hpx: 24}, {hpx: 20}];
 
@@ -389,7 +389,7 @@ function downloadBandXLSX(DATA, band){
   }
 
   // ---- estilo das linhas de dados ----
-  const centeredCols = new Set([0, 3, 4, 7, 8, 9, 10]); // chamado, status, prioridade, datas, dias, faixa
+  const centeredCols = new Set([0, 3, 4, 8, 9, 10, 11]); // chamado, status, prioridade, datas, dias, faixa
   rows.forEach((r, i) => {
     const rowIdx = 2 + i;
     const baseFill = i % 2 === 0 ? ROW_A_HEX : ROW_B_HEX;
@@ -399,10 +399,10 @@ function downloadBandXLSX(DATA, band){
       if (!cell) continue;
       let fill = baseFill;
       let font = {name:'Arial', sz:9, color:{rgb:'000000'}};
-      if (c === 9){ // Dias Aberto: cor pela faixa real da linha
+      if (c === 10){ // Dias Aberto: cor pela faixa real da linha
         font = {name:'Arial', sz:9, bold:true, color:{rgb: BAND_FONT_HEX[r.band] || '000000'}};
       }
-      if (band === 'n1' && c === 10){ // Faixa: preenche com a cor da faixa
+      if (band === 'n1' && c === 11){ // Faixa: preenche com a cor da faixa
         fill = BAND_FILL_HEX[r.band] || baseFill;
         font = {name:'Arial', sz:9, bold:true, color:{rgb: BAND_FONT_HEX[r.band] || '000000'}};
       }
