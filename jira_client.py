@@ -44,28 +44,19 @@ class JiraClient:
         self._session.headers.update({"Accept": "application/json"})
 
     # ------------------------------------------------------------------
-    def fetch_open_issues(self, project_key: str,
-                           extra_jql: str = "",
-                           max_pages: int = 10) -> Iterator[dict[str, Any]]:
-        """Gera (yield) cada issue em aberto do projeto, paginando
-        automaticamente via nextPageToken (API de busca atual do Jira Cloud).
+    def search(self, jql: str, fields: list[str] | None = None,
+               max_pages: int = 10, page_size: int = 100) -> Iterator[dict[str, Any]]:
+        """Gera (yield) cada issue que casa com a JQL informada, paginando
+        automaticamente via nextPageToken.
 
-        max_pages é um limite de segurança (10 páginas x 100 = até 1000
-        issues) para nunca puxar um histórico gigante por engano caso a
-        JQL de filtro de "aberto" mude e volte a casar com chamados
-        antigos já fechados — isso já causou estouro de memória em
-        produção uma vez.
+        max_pages é um limite de segurança para nunca puxar um volume
+        gigante de issues por engano.
         """
-        jql = f"project = {project_key} AND statusCategory != Done"
-        if extra_jql:
-            jql += f" AND {extra_jql}"
-        jql += " ORDER BY created ASC"
-
         url = f"{self.base_url}/rest/api/3/search/jql"
         payload = {
             "jql": jql,
-            "maxResults": 100,
-            "fields": FIELDS,
+            "maxResults": page_size,
+            "fields": fields or FIELDS,
         }
 
         next_token = None
@@ -88,6 +79,26 @@ class JiraClient:
                 break
             if pages_fetched >= max_pages:
                 break
+
+    # ------------------------------------------------------------------
+    def fetch_open_issues(self, project_key: str,
+                           extra_jql: str = "",
+                           max_pages: int = 10) -> Iterator[dict[str, Any]]:
+        """Gera (yield) cada issue em aberto do projeto. Atalho sobre
+        search() com a JQL de "aberto" já pronta.
+
+        max_pages é um limite de segurança (10 páginas x 100 = até 1000
+        issues) para nunca puxar um histórico gigante por engano caso a
+        JQL de filtro de "aberto" mude e volte a casar com chamados
+        antigos já fechados — isso já causou estouro de memória em
+        produção uma vez.
+        """
+        jql = f"project = {project_key} AND statusCategory != Done"
+        if extra_jql:
+            jql += f" AND {extra_jql}"
+        jql += " ORDER BY created ASC"
+        yield from self.search(jql, fields=FIELDS, max_pages=max_pages)
+
 
 
     # ------------------------------------------------------------------
