@@ -47,6 +47,24 @@ def _get_client():
     return _client
 
 
+def _store_snapshot(snapshot: dict) -> bool:
+    """Grava um snapshot já pronto (dict com "date" no formato
+    YYYY-MM-DD) no Redis. Usado tanto pelo tracking em tempo real
+    (record_snapshot) quanto pelo preenchimento retroativo (backfill.py).
+    Retorna True se conseguiu gravar.
+    """
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        date_str = snapshot["date"]
+        client.set(f"{SNAPSHOT_PREFIX}{date_str}", json.dumps(snapshot))
+        client.zadd(INDEX_KEY, {date_str: dt.date.fromisoformat(date_str).toordinal()})
+        return True
+    except Exception:
+        return False
+
+
 def record_snapshot(dashboard_data: dict, today: dt.date | None = None) -> None:
     """Grava (ou atualiza) o snapshot de HOJE com os números atuais do
     backlog. Chamado toda vez que o cache principal é atualizado, então
@@ -56,8 +74,7 @@ def record_snapshot(dashboard_data: dict, today: dt.date | None = None) -> None:
     O parâmetro `today` existe principalmente para facilitar testes
     (injetar uma data fixa); em produção sempre usa a data real.
     """
-    client = _get_client()
-    if client is None:
+    if _get_client() is None:
         return
 
     today = today or dt.date.today()
@@ -89,13 +106,10 @@ def record_snapshot(dashboard_data: dict, today: dt.date | None = None) -> None:
         "red": counts.get("red", 0),
         "abertos_hoje": abertos_hoje,
         "updated_at": dt.datetime.now().strftime("%H:%M:%S"),
+        "source": "live",
     }
+    _store_snapshot(snapshot)
 
-    try:
-        client.set(f"{SNAPSHOT_PREFIX}{date_str}", json.dumps(snapshot))
-        client.zadd(INDEX_KEY, {date_str: today.toordinal()})
-    except Exception:
-        pass
 
 
 def get_history(days: int = 30) -> list[dict]:
