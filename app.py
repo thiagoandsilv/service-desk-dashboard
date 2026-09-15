@@ -158,6 +158,44 @@ def api_history():
     return resp
 
 
+_backfill_lock = threading.Lock()
+_backfill_in_progress = False
+
+
+@app.route("/api/backfill", methods=["POST"])
+@require_auth
+def api_backfill():
+    global _backfill_in_progress
+
+    if not history_store.is_enabled():
+        return jsonify({"error": "Histórico não está configurado (REDIS_URL ausente)."}), 400
+
+    if _backfill_in_progress:
+        return jsonify({"error": "Já existe um preenchimento retroativo em andamento."}), 409
+
+    days = request.args.get("days", "30")
+    try:
+        days = max(1, min(int(days), 90))
+    except ValueError:
+        days = 30
+
+    with _backfill_lock:
+        if _backfill_in_progress:
+            return jsonify({"error": "Já existe um preenchimento retroativo em andamento."}), 409
+        _backfill_in_progress = True
+
+    try:
+        import backfill
+        resumo = backfill.run_backfill(days=days)
+        return jsonify({"status": "ok", **resumo})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        with _backfill_lock:
+            _backfill_in_progress = False
+
+
 # Inicia o refresh em background assim que o processo sobe (Gunicorn ou
 # `python app.py`), para o cache já vir quente na primeira visita.
 _refresher_thread = threading.Thread(target=_background_refresher, daemon=True)
