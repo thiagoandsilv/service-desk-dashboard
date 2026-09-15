@@ -158,24 +158,22 @@
 
   .weekday-chart-wrap{ padding: 4px 8px 8px; }
 
-  .ibar-row{ margin-bottom: 14px; }
-  .ibar-head{
-    display:flex; justify-content:space-between; align-items:baseline;
-    gap: 12px; margin-bottom: 4px;
+  .ibar-row{
+    display:flex; align-items:center; gap: 12px; margin-bottom: 6px;
   }
   .ibar-label{
-    font-size: 13px; color: var(--text); font-weight:500;
-    overflow-wrap: anywhere;
-  }
-  .ibar-count{
-    font-size: 12.5px; font-weight:bold; color: var(--text);
-    white-space:nowrap; flex-shrink:0;
+    flex:1; min-width:0; font-size: 12.5px; color: var(--text);
+    overflow-wrap: anywhere; line-height: 1.3;
   }
   .ibar-track{
-    height: 7px; background:#E5E9F0; border-radius: 3px; overflow:hidden;
-    max-width: 420px;
+    width: 130px; flex-shrink:0; height: 8px; background:#E5E9F0;
+    border-radius: 3px; overflow:hidden;
   }
   .ibar-fill{ height:100%; border-radius: 3px; }
+  .ibar-count{
+    width: 64px; flex-shrink:0; text-align:right;
+    font-size: 12.5px; font-weight:bold; color: var(--text); white-space:nowrap;
+  }
 
   .panel{ display:none; padding: 0 0 18px; }
   .panel.active{ display:block; }
@@ -739,10 +737,11 @@ function renderInsightsPanel(ins){
 
   function ibarRow(label, qtd, pct, max, color){
     const pctTxt = pct != null ? ` (${Math.round(pct*100)}%)` : '';
-    const widthPct = Math.max((qtd / max) * 100, 2);
+    const widthPct = Math.max((qtd / max) * 100, 3);
     return `<div class="ibar-row">
-      <div class="ibar-head"><span class="ibar-label">${escapeHtml(label)}</span><span class="ibar-count">${qtd}${pctTxt}</span></div>
+      <div class="ibar-label">${escapeHtml(label)}</div>
       <div class="ibar-track"><div class="ibar-fill" style="width:${widthPct.toFixed(1)}%; background:${color}"></div></div>
+      <div class="ibar-count">${qtd}${pctTxt}</div>
     </div>`;
   }
 
