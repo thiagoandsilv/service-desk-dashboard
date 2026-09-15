@@ -32,6 +32,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 from jira_sync import fetch_dashboard_data
 import history_store
+import insights
 
 app = Flask(__name__, static_folder="static")
 
@@ -39,6 +40,9 @@ REFRESH_SECONDS = int(os.environ.get("REFRESH_SECONDS", "300"))
 # Cooldown mínimo entre buscas forçadas (botão "Atualizar"), pra ninguém
 # conseguir martelar o botão e sobrecarregar a API do Jira.
 FORCE_REFRESH_COOLDOWN = int(os.environ.get("FORCE_REFRESH_COOLDOWN", "15"))
+# Os insights de reunião olham 30 dias pra trás — não precisam ser
+# recalculados a cada 5 minutos como o resto do dashboard.
+INSIGHTS_REFRESH_SECONDS = int(os.environ.get("INSIGHTS_REFRESH_SECONDS", "1800"))
 
 DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "")
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
@@ -47,6 +51,10 @@ AUTH_ENABLED = bool(DASHBOARD_USER and DASHBOARD_PASSWORD)
 _cache_lock = threading.Lock()
 _cache = {"data": None, "fetched_at": 0.0, "error": None}
 _refresh_in_progress = threading.Lock()
+
+_insights_lock = threading.Lock()
+_insights_cache = {"data": None, "fetched_at": 0.0, "error": None}
+_insights_refresh_in_progress = threading.Lock()
 
 
 def _check_credentials(user: str, password: str) -> bool:
@@ -97,6 +105,26 @@ def _background_refresher():
     while True:
         _refresh_cache()
         time.sleep(REFRESH_SECONDS)
+
+
+def _refresh_insights_cache():
+    with _insights_refresh_in_progress:
+        try:
+            data = insights.build_insights(days=30)
+            with _insights_lock:
+                _insights_cache["data"] = data
+                _insights_cache["fetched_at"] = time.time()
+                _insights_cache["error"] = None
+        except Exception as e:
+            traceback.print_exc()
+            with _insights_lock:
+                _insights_cache["error"] = str(e)
+
+
+def _background_insights_refresher():
+    while True:
+        _refresh_insights_cache()
+        time.sleep(INSIGHTS_REFRESH_SECONDS)
 
 
 @app.route("/")
@@ -196,10 +224,39 @@ def api_backfill():
             _backfill_in_progress = False
 
 
+@app.route("/api/insights")
+@require_auth
+def api_insights():
+    force = request.args.get("force") == "1"
+
+    with _insights_lock:
+        data = _insights_cache["data"]
+        error = _insights_cache["error"]
+        fetched_at = _insights_cache["fetched_at"]
+
+    should_force = force and (time.time() - fetched_at) >= FORCE_REFRESH_COOLDOWN
+    if (data is None and error is None) or should_force:
+        _refresh_insights_cache()
+        with _insights_lock:
+            data = _insights_cache["data"]
+            error = _insights_cache["error"]
+            fetched_at = _insights_cache["fetched_at"]
+
+    if data is None:
+        return jsonify({"error": error or "Sem dados ainda"}), 503
+
+    resp = jsonify(data)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 # Inicia o refresh em background assim que o processo sobe (Gunicorn ou
 # `python app.py`), para o cache já vir quente na primeira visita.
 _refresher_thread = threading.Thread(target=_background_refresher, daemon=True)
 _refresher_thread.start()
+
+_insights_refresher_thread = threading.Thread(target=_background_insights_refresher, daemon=True)
+_insights_refresher_thread.start()
 
 
 if __name__ == "__main__":
