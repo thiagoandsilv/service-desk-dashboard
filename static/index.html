@@ -156,38 +156,26 @@
   }
   .insight-section:first-of-type .insight-section-title{ border-top:none; padding-top:0; }
 
-  .weekday-chart{
-    display:flex; align-items:flex-end; gap: 14px; height: 140px; padding: 0 8px;
-  }
-  .weekday-col{ flex:1; display:flex; flex-direction:column; align-items:center; height:100%; }
-  .weekday-bar-track{
-    flex:1; width:100%; display:flex; align-items:flex-end; justify-content:center;
-  }
-  .weekday-bar-fill{
-    width: 60%; background: #0D47A1; border-radius: 3px 3px 0 0;
-    min-height: 2px; display:flex; align-items:flex-start; justify-content:center;
-    padding-top: 4px; transition: height .2s;
-  }
-  .weekday-bar-val{ color:#fff; font-size: 11px; font-weight:bold; font-family: Arial; }
-  .weekday-label{ font-size: 11.5px; color: var(--text-dim); margin-top: 6px; font-weight:bold; }
+  .weekday-chart-wrap{ padding: 4px 8px 8px; }
 
-  .bd-row{
-    display:flex; align-items:center; gap: 12px; margin-bottom: 8px;
+  .ibar-row{ margin-bottom: 14px; }
+  .ibar-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    gap: 12px; margin-bottom: 4px;
   }
-  .bd-label{
-    width: 240px; flex-shrink:0; font-size: 12.5px; color: var(--text);
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  .ibar-label{
+    font-size: 13px; color: var(--text); font-weight:500;
+    overflow-wrap: anywhere;
   }
-  .bar-track{
-    flex:1; height: 9px; background:#E5E9F0; border-radius: 3px; overflow:hidden;
+  .ibar-count{
+    font-size: 12.5px; font-weight:bold; color: var(--text);
+    white-space:nowrap; flex-shrink:0;
   }
-  .bar-fill{
-    height:100%; background: var(--overview); border-radius: 3px;
+  .ibar-track{
+    height: 7px; background:#E5E9F0; border-radius: 3px; overflow:hidden;
+    max-width: 420px;
   }
-  .bd-val{
-    width: 42px; text-align:right; font-size: 12.5px; font-weight:bold;
-    color: var(--text); flex-shrink:0;
-  }
+  .ibar-fill{ height:100%; border-radius: 3px; }
 
   .panel{ display:none; padding: 0 0 18px; }
   .panel.active{ display:block; }
@@ -714,27 +702,54 @@ function renderInsightsPanel(ins){
     </div>
   </div>`;
 
-  const maxW = Math.max(...ins.weekday_volume.map(w => w.count), 1);
+  // ---- gráfico por dia da semana, em SVG (controle exato de altura,
+  // sem depender de flexbox % — foi isso que quebrou os dias com poucos
+  // ou nenhum chamado antes) ----
+  const wdMax = Math.max(...ins.weekday_volume.map(w => w.count), 1);
+  const wW = 620, wH = 160, wPadB = 26, wPadT = 22;
+  const wInnerH = wH - wPadB - wPadT;
+  const wColW = wW / ins.weekday_volume.length;
+  const wBarW = wColW * 0.5;
+  let wdSvg = `<svg viewBox="0 0 ${wW} ${wH}" style="width:100%; max-width:640px; height:auto; display:block;">`;
+  ins.weekday_volume.forEach((w, i) => {
+    const cx = wColW * i + wColW / 2;
+    const barH = w.count > 0 ? Math.max((w.count / wdMax) * wInnerH, 4) : 0;
+    const barY = wPadT + wInnerH - barH;
+    wdSvg += `<line x1="${cx - wBarW/2}" y1="${wPadT + wInnerH}" x2="${cx + wBarW/2}" y2="${wPadT + wInnerH}" stroke="#D9DEE6" stroke-width="1"/>`;
+    if (w.count > 0){
+      wdSvg += `<rect x="${cx - wBarW/2}" y="${barY}" width="${wBarW}" height="${barH}" rx="2" fill="#0D47A1"/>
+        <text x="${cx}" y="${barY - 6}" text-anchor="middle" font-size="12" font-weight="bold" fill="#1A1A1A" font-family="Arial">${w.count}</text>`;
+    } else {
+      wdSvg += `<text x="${cx}" y="${wPadT + wInnerH - 6}" text-anchor="middle" font-size="11" fill="#9AA3B2" font-family="Arial">0</text>`;
+    }
+    wdSvg += `<text x="${cx}" y="${wH - 6}" text-anchor="middle" font-size="11" fill="#5A5A5A" font-family="Arial" font-weight="bold">${w.day.slice(0,3)}</text>`;
+  });
+  wdSvg += `</svg>`;
+
   html += `<div class="insight-section">
     <div class="insight-section-title">📅 Volume de chamados por dia da semana</div>
-    <div class="weekday-chart">`;
-  ins.weekday_volume.forEach(w => {
-    const h = Math.max(Math.round((w.count / maxW) * 100), w.count > 0 ? 6 : 0);
-    html += `<div class="weekday-col">
-      <div class="weekday-bar-track"><div class="weekday-bar-fill" style="height:${h}%">
-        <span class="weekday-bar-val">${w.count}</span></div></div>
-      <div class="weekday-label">${w.day.slice(0,3)}</div>
+    <div class="weekday-chart-wrap">${wdSvg}</div>
+  </div>`;
+
+  // ---- linhas de distribuição: rótulo completo (sem truncar) numa
+  // linha, com a contagem ao lado; barra fina e compacta embaixo ----
+  function escapeHtml(s){
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function ibarRow(label, qtd, pct, max, color){
+    const pctTxt = pct != null ? ` (${Math.round(pct*100)}%)` : '';
+    const widthPct = Math.max((qtd / max) * 100, 2);
+    return `<div class="ibar-row">
+      <div class="ibar-head"><span class="ibar-label">${escapeHtml(label)}</span><span class="ibar-count">${qtd}${pctTxt}</span></div>
+      <div class="ibar-track"><div class="ibar-fill" style="width:${widthPct.toFixed(1)}%; background:${color}"></div></div>
     </div>`;
-  });
-  html += `</div></div>`;
+  }
 
   html += `<div class="insight-section"><div class="insight-section-title">🏷️ Faixa de idade dos chamados ainda abertos</div>`;
+  const ageMax = Math.max(...ins.age_bands.map(b => b.qtd), 1);
   ins.age_bands.forEach(b => {
-    html += `<div class="bd-row">
-      <div class="bd-label" style="width:150px;">${b.label}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${(b.pct*100).toFixed(1)}%; background:${BAND_PILL_COLOR[b.band] || '#0D47A1'}"></div></div>
-      <div class="bd-val">${b.qtd} (${Math.round(b.pct*100)}%)</div>
-    </div>`;
+    html += ibarRow(b.label, b.qtd, b.pct, ageMax, BAND_PILL_COLOR[b.band] || '#0D47A1');
   });
   html += `</div>`;
 
@@ -743,11 +758,7 @@ function renderInsightsPanel(ins){
     const max = Math.max(...items.map(i => i.qtd), 1);
     let h = `<div class="insight-section"><div class="insight-section-title">${icon} ${title}</div>`;
     items.forEach(i => {
-      h += `<div class="bd-row">
-        <div class="bd-label" title="${(i.label||'').replace(/"/g,'&quot;')}">${i.label}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${(i.qtd/max*100).toFixed(1)}%"></div></div>
-        <div class="bd-val">${i.qtd}</div>
-      </div>`;
+      h += ibarRow(i.label, i.qtd, null, max, 'var(--overview)');
     });
     return h + `</div>`;
   }
