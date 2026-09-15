@@ -51,6 +51,7 @@
   .tab[data-tab="red"].active{ border-top: 3px solid var(--red-title); }
   .tab[data-tab="n1"].active{ border-top: 3px solid var(--n1-title); }
   .tab[data-tab="trend"].active{ border-top: 3px solid var(--overview); }
+  .tab[data-tab="insights"].active{ border-top: 3px solid var(--n1-title); }
 
   .live-status{
     font-size: 11.5px; color: var(--text-dim); padding: 0 8px 8px; white-space:nowrap;
@@ -132,6 +133,44 @@
   .backfill-status.ok{ color: #155724; }
   .backfill-status.err{ color: #B71C1C; }
 
+  .insight-toolbar{
+    display:flex; align-items:center; gap: 12px; padding: 12px 16px;
+    background:#F4F6F9; border-bottom: 1px solid var(--border);
+  }
+
+  .insight-alert{
+    display:flex; gap: 14px; align-items:flex-start; padding: 16px 20px;
+    margin: 16px; border-radius: 4px; border: 1px solid;
+  }
+  .insight-alert.ok{ background:#D4EDDA; border-color:#B7DDC0; }
+  .insight-alert.atencao{ background:#FFE0B2; border-color:#F0C48A; }
+  .insight-alert.alerta{ background:#FFCDD2; border-color:#F0AAAF; }
+  .insight-alert-icon{ font-size: 22px; line-height:1; }
+  .insight-alert-title{ font-weight:bold; font-size: 13.5px; color: var(--text); margin-bottom: 4px; }
+  .insight-alert-sub{ font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+
+  .insight-section{ padding: 8px 20px 20px; }
+  .insight-section-title{
+    font-weight:bold; font-size: 13.5px; color: var(--text); margin: 12px 0 12px;
+    padding-top: 8px; border-top: 1px solid var(--border);
+  }
+  .insight-section:first-of-type .insight-section-title{ border-top:none; padding-top:0; }
+
+  .weekday-chart{
+    display:flex; align-items:flex-end; gap: 14px; height: 140px; padding: 0 8px;
+  }
+  .weekday-col{ flex:1; display:flex; flex-direction:column; align-items:center; height:100%; }
+  .weekday-bar-track{
+    flex:1; width:100%; display:flex; align-items:flex-end; justify-content:center;
+  }
+  .weekday-bar-fill{
+    width: 60%; background: #0D47A1; border-radius: 3px 3px 0 0;
+    min-height: 2px; display:flex; align-items:flex-start; justify-content:center;
+    padding-top: 4px; transition: height .2s;
+  }
+  .weekday-bar-val{ color:#fff; font-size: 11px; font-weight:bold; font-family: Arial; }
+  .weekday-label{ font-size: 11.5px; color: var(--text-dim); margin-top: 6px; font-weight:bold; }
+
   .panel{ display:none; padding: 0 0 18px; }
   .panel.active{ display:block; }
   .titlebar{ color:#fff; font-weight:bold; font-size: 15px; text-align:center; padding: 12px 16px; }
@@ -197,6 +236,7 @@
       <div class="tab" data-tab="red">🔴 Acima de 50 dias</div>
       <div class="tab" data-tab="n1">👥 N1</div>
       <div class="tab" data-tab="trend">📈 Tendência</div>
+      <div class="tab" data-tab="insights">📋 Insights</div>
     </div>
     <div class="live-status" id="liveStatus">
       <button class="refresh-btn" id="refreshBtn" title="Buscar dados mais recentes agora">🔄 Atualizar</button>
@@ -221,6 +261,7 @@ const BAND_ORDER = ['green','yellow','orange','red'];
 let currentTab = 'overview';
 let lastData = null;
 let lastHistory = {history: [], enabled: false};
+let lastInsights = null;
 // filtros selecionados em cada aba de faixa ('' = todos)
 const bandFilter = {green:'', yellow:'', orange:'', red:'', n1:''};
 const statusFilter = {green:'', yellow:'', orange:'', red:'', n1:''};
@@ -630,6 +671,103 @@ function wireTrendEvents(){
   });
 }
 
+function renderInsightsPanel(ins){
+  if (!ins){
+    return `<div class="titlebar n1">📋 Insights para Reunião</div>
+      <div class="trend-empty">Calculando a partir do Jira, isso pode levar alguns segundos na primeira vez…</div>`;
+  }
+
+  const dq = ins.data_quality;
+  const dqPct = Math.round(dq.pct_com_resolutiondate * 100);
+  const dqLevel = dq.pct_com_resolutiondate < 0.3 ? 'alerta' : (dq.pct_com_resolutiondate < 0.7 ? 'atencao' : 'ok');
+
+  let html = `<div class="titlebar n1">📋 Insights para Reunião — últimos ${ins.period_days} dias (${ins.total_period} chamados)  |  atualizado em ${ins.generated_at}</div>`;
+
+  html += `<div class="insight-toolbar">
+    <button class="backfill-btn" id="insightsRefreshBtn">🔄 Recalcular agora</button>
+    <span id="insightsRefreshStatus" class="backfill-status"></span>
+  </div>`;
+
+  html += `<div class="insight-alert ${dqLevel}">
+    <div class="insight-alert-icon">⚠️</div>
+    <div>
+      <div class="insight-alert-title">Qualidade de dados: só ${dqPct}% dos chamados do período têm "Data de Resolução" preenchida</div>
+      <div class="insight-alert-sub">${dq.com_resolutiondate} de ${dq.total_periodo} chamados. Sem esse campo, não dá pra medir tempo de resolução com confiança — vale cobrar que o fluxo do Jira grave essa data automaticamente ao fechar um chamado.</div>
+    </div>
+  </div>`;
+
+  const maxW = Math.max(...ins.weekday_volume.map(w => w.count), 1);
+  html += `<div class="insight-section">
+    <div class="insight-section-title">📅 Volume de chamados por dia da semana</div>
+    <div class="weekday-chart">`;
+  ins.weekday_volume.forEach(w => {
+    const h = Math.max(Math.round((w.count / maxW) * 100), w.count > 0 ? 6 : 0);
+    html += `<div class="weekday-col">
+      <div class="weekday-bar-track"><div class="weekday-bar-fill" style="height:${h}%">
+        <span class="weekday-bar-val">${w.count}</span></div></div>
+      <div class="weekday-label">${w.day.slice(0,3)}</div>
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  html += `<div class="insight-section"><div class="insight-section-title">🏷️ Faixa de idade dos chamados ainda abertos</div>`;
+  ins.age_bands.forEach(b => {
+    html += `<div class="bd-row">
+      <div class="bd-label" style="width:150px;">${b.label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(b.pct*100).toFixed(1)}%; background:${BAND_PILL_COLOR[b.band] || '#0D47A1'}"></div></div>
+      <div class="bd-val">${b.qtd} (${Math.round(b.pct*100)}%)</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  function distSection(title, items, icon){
+    if (!items.length) return '';
+    const max = Math.max(...items.map(i => i.qtd), 1);
+    let h = `<div class="insight-section"><div class="insight-section-title">${icon} ${title}</div>`;
+    items.forEach(i => {
+      h += `<div class="bd-row">
+        <div class="bd-label" title="${(i.label||'').replace(/"/g,'&quot;')}">${i.label}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(i.qtd/max*100).toFixed(1)}%"></div></div>
+        <div class="bd-val">${i.qtd}</div>
+      </div>`;
+    });
+    return h + `</div>`;
+  }
+
+  html += distSection('Por responsável', ins.by_responsavel, '👤');
+  html += distSection('Por tipo de chamado', ins.by_tipo, '🏷️');
+  html += distSection('Top clientes no período', ins.by_cliente, '🏢');
+  html += distSection('Por status atual', ins.by_status, '📌');
+
+  return html;
+}
+
+function wireInsightsEvents(){
+  const btn = document.getElementById('insightsRefreshBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const statusEl = document.getElementById('insightsRefreshStatus');
+    btn.disabled = true;
+    statusEl.className = 'backfill-status';
+    statusEl.textContent = 'recalculando…';
+    try{
+      const res = await fetch('/api/insights?force=1', {cache: 'no-store'});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      lastInsights = data;
+      document.getElementById('panel-insights').innerHTML = renderInsightsPanel(lastInsights);
+      wireInsightsEvents();
+      const newStatus = document.getElementById('insightsRefreshStatus');
+      if (newStatus){ newStatus.className = 'backfill-status ok'; newStatus.textContent = '✓ atualizado'; }
+    } catch(e){
+      statusEl.className = 'backfill-status err';
+      statusEl.textContent = 'erro: ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 function render(DATA){
   lastData = DATA;
   const content = document.getElementById('content');
@@ -640,12 +778,14 @@ function render(DATA){
   });
   html += `<div class="panel" id="panel-n1">${renderBandPanel(DATA, 'n1')}</div>`;
   html += `<div class="panel" id="panel-trend">${renderTrendPanel(lastHistory)}</div>`;
+  html += `<div class="panel" id="panel-insights">${renderInsightsPanel(lastInsights)}</div>`;
 
   content.innerHTML = html;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + currentTab).classList.add('active');
   wireBandFilterEvents();
   wireTrendEvents();
+  wireInsightsEvents();
 }
 
 document.getElementById('tabbar').addEventListener('click', (e) => {
@@ -680,6 +820,16 @@ async function loadData(manual){
       const histRes = await fetch('/api/history?days=30', {cache: 'no-store'});
       if (histRes.ok) lastHistory = await histRes.json();
     } catch(histErr){ /* aba de Tendência mostra o estado vazio, sem quebrar o resto */ }
+
+    // os insights de reunião são mais pesados (30 dias de Jira) e o
+    // servidor já cacheia por 30 min — busca só uma vez por sessão,
+    // não a cada poll de 60s. O botão "Recalcular agora" força de novo.
+    if (!lastInsights){
+      try{
+        const insRes = await fetch('/api/insights', {cache: 'no-store'});
+        if (insRes.ok) lastInsights = await insRes.json();
+      } catch(insErr){ /* aba de Insights mostra o estado de carregando */ }
+    }
 
     render(data);
     dot.className = 'live-dot';
