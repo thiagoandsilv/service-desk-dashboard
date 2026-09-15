@@ -70,6 +70,9 @@ def fetch_dashboard_data() -> dict:
         dias = max((report_date - criado).days, 0)
         band = _band_for(dias)
 
+        orgs = f_.get("customfield_10002") or []
+        cliente = ", ".join(o.get("name", "") for o in orgs if o.get("name")) or "—"
+
         rows.append({
             "key": issue["key"],
             "tipo": (f_.get("issuetype") or {}).get("name", ""),
@@ -78,6 +81,7 @@ def fetch_dashboard_data() -> dict:
             "prioridade": (f_.get("priority") or {}).get("name", "—"),
             "responsavel": responsavel,
             "solicitante": solicitante,
+            "cliente": cliente,
             "criado_em": criado.strftime("%d/%m/%Y %H:%M"),
             "atualizado_em": atualizado.strftime("%d/%m/%Y"),
             "dias_aberto": dias,
