@@ -22,6 +22,7 @@ import requests
 FIELDS = [
     "summary", "issuetype", "status", "priority",
     "assignee", "reporter", "created", "updated",
+    "customfield_10002",  # Organizations (cliente) do Jira Service Management
 ]
 
 
