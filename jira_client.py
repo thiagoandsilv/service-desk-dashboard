@@ -66,20 +66,28 @@ class JiraClient:
                                    max_results: int = 100) -> list[dict[str, Any]]:
         """Busca objetos do Jira Assets via AQL (Assets Query Language),
         paginando automaticamente. Ex de aql: 'objectType = "Contrato sustentação"'.
+
+        A API usa paginação por deslocamento (startAt + total), não por
+        número de página — e devolve no máximo 25 itens por vez mesmo
+        pedindo mais, então o loop sempre continua até acumular tudo
+        conforme o campo "total" da resposta.
         """
         url = f"https://api.atlassian.com/jsm/assets/workspace/{workspace_id}/v1/object/aql"
         objects: list[dict[str, Any]] = []
-        page = 1
+        start_at = 0
+        safety_pages = 0
         while True:
-            body = {"qlQuery": aql, "page": page, "resultsPerPage": max_results}
+            body = {"qlQuery": aql, "startAt": start_at, "maxResults": max_results}
             resp = self._session.post(url, json=body, timeout=self.timeout)
             resp.raise_for_status()
             data = resp.json()
             values = data.get("values", [])
             objects.extend(values)
-            if not values or not data.get("hasMoreResults") or page >= 50:
+            total = data.get("total", len(objects))
+            start_at += len(values)
+            safety_pages += 1
+            if not values or start_at >= total or safety_pages >= 50:
                 break
-            page += 1
         return objects
 
     def debug_aql_raw_meta(self, workspace_id: str, aql: str,
