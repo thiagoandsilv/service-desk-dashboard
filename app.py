@@ -370,11 +370,11 @@ def api_debug_assets_aql():
 @app.route("/api/debug/assets-aql-meta")
 @require_auth
 def api_debug_assets_aql_meta():
-    """Debug temporário: mostra os metadados de paginação da resposta
-    crua (sem os objetos), pra descobrir os nomes certos dos campos."""
+    """Debug temporário: compara duas páginas (start_at=0 e start_at=25)
+    lado a lado, pra confirmar se o parâmetro startAt realmente muda o
+    conjunto de objetos devolvido pela API."""
     workspace_id = request.args.get("workspace_id", "")
     aql = request.args.get("aql", 'objectType = "Contrato sustentação"')
-    page = int(request.args.get("page", "1"))
     if not workspace_id:
         return jsonify({"error": "informe ?workspace_id=..."}), 400
 
@@ -384,8 +384,17 @@ def api_debug_assets_aql_meta():
         api_token=os.environ["JIRA_API_TOKEN"],
     )
     try:
-        meta = client.debug_aql_raw_meta(workspace_id, aql, page=page)
-        resp = jsonify({"status": "OK", "meta": meta})
+        page0 = client.debug_aql_raw_meta(workspace_id, aql, start_at=0)
+        page25 = client.debug_aql_raw_meta(workspace_id, aql, start_at=25)
+        keys0 = set(page0.get("object_keys_nesta_pagina", []))
+        keys25 = set(page25.get("object_keys_nesta_pagina", []))
+        resp = jsonify({
+            "status": "OK",
+            "start_at_0": page0,
+            "start_at_25": page25,
+            "sao_identicas": keys0 == keys25,
+            "chaves_em_comum": sorted(keys0 & keys25),
+        })
     except Exception as e:
         resp = jsonify({"status": "FALHOU", "erro": str(e)})
     resp.headers["Cache-Control"] = "no-store"
