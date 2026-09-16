@@ -44,6 +44,25 @@ class JiraClient:
         self._session.headers.update({"Accept": "application/json"})
 
     # ------------------------------------------------------------------
+    def get_assets_object_v1(self, workspace_id: str, object_id: str) -> dict[str, Any]:
+        """Tenta a API atual de Jira Assets (api.atlassian.com/jsm/assets/...).
+        Costuma exigir um token OAuth com escopo de Assets — pode não
+        funcionar com e-mail + API token clássico."""
+        url = f"https://api.atlassian.com/jsm/assets/workspace/{workspace_id}/v1/object/{object_id}"
+        resp = self._session.get(url, timeout=self.timeout)
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_assets_object_legacy(self, object_id: str) -> dict[str, Any]:
+        """Tenta a API "legada" de Insight, no mesmo domínio do Jira —
+        essa costuma aceitar a mesma autenticação Basic (e-mail + token)
+        usada no resto deste cliente."""
+        url = f"{self.base_url}/rest/servicedesk/insight/1.0/object/{object_id}"
+        resp = self._session.get(url, timeout=self.timeout)
+        resp.raise_for_status()
+        return resp.json()
+
+    # ------------------------------------------------------------------
     def search(self, jql: str, fields: list[str] | None = None,
                max_pages: int = 10, page_size: int = 100) -> Iterator[dict[str, Any]]:
         """Gera (yield) cada issue que casa com a JQL informada, paginando
