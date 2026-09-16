@@ -59,7 +59,7 @@ def build_insights(days: int = 30, today: dt.date | None = None) -> dict:
     issues = list(client.search(
         jql,
         fields=["created", "resolutiondate", "assignee", "issuetype",
-                "status", "customfield_10002"],
+                "status", "customfield_10002", "customfield_10400"],
         max_pages=100, page_size=100))
 
     today = today or dt.date.today()
@@ -76,8 +76,10 @@ def build_insights(days: int = 30, today: dt.date | None = None) -> dict:
         status = (f_.get("status") or {}).get("name", "")
         orgs = f_.get("customfield_10002") or []
         cliente = orgs[0].get("name", "—") if orgs else "—"
+        horas = f_.get("customfield_10400") or 0
         rows.append(dict(key=issue["key"], created=created, resolved=resolved,
-                          assignee=assignee, tipo=tipo, status=status, cliente=cliente))
+                          assignee=assignee, tipo=tipo, status=status,
+                          cliente=cliente, horas=horas))
 
     total = len(rows)
     ainda_abertos = [r for r in rows if r["resolved"] is None]
@@ -109,6 +111,19 @@ def build_insights(days: int = 30, today: dt.date | None = None) -> dict:
         items = counter.most_common(top)
         return [{"label": k, "qtd": v, "pct": v / total if total else 0} for k, v in items]
 
+    # ---- top clientes por HORAS consumidas (não por quantidade de
+    # chamados) — soma customfield_10400 agrupado por cliente ----
+    horas_por_cliente: dict[str, float] = {}
+    for r in rows:
+        if r["horas"]:
+            horas_por_cliente[r["cliente"]] = horas_por_cliente.get(r["cliente"], 0) + r["horas"]
+    total_horas = sum(horas_por_cliente.values())
+    by_cliente_horas = [
+        {"label": cliente, "horas": round(horas, 1),
+         "pct": (horas / total_horas) if total_horas else 0}
+        for cliente, horas in sorted(horas_por_cliente.items(), key=lambda kv: -kv[1])[:8]
+    ]
+
     return {
         "generated_at": dt.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
         "period_days": days,
@@ -124,5 +139,7 @@ def build_insights(days: int = 30, today: dt.date | None = None) -> dict:
         "by_tipo": _dist("tipo"),
         "by_responsavel": _dist("assignee"),
         "by_cliente": _dist("cliente", top=8),
+        "by_cliente_horas": by_cliente_horas,
+        "total_horas_periodo": round(total_horas, 1),
         "by_status": _dist("status"),
     }
