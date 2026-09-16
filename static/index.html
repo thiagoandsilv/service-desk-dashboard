@@ -762,9 +762,26 @@ function renderInsightsPanel(ins){
     return h + `</div>`;
   }
 
+  function horasSection(title, items, icon, totalHoras){
+    if (!items.length) return '';
+    const max = Math.max(...items.map(i => i.horas), 1);
+    let h = `<div class="insight-section"><div class="insight-section-title">${icon} ${title}
+      <span style="font-weight:normal; color:var(--text-dim); font-size:12px;"> — ${totalHoras}h no total</span></div>`;
+    items.forEach(i => {
+      const widthPct = Math.max((i.horas / max) * 100, 3);
+      h += `<div class="ibar-row">
+        <div class="ibar-label">${escapeHtml(i.label)}</div>
+        <div class="ibar-track"><div class="ibar-fill" style="width:${widthPct.toFixed(1)}%; background:#6C3483"></div></div>
+        <div class="ibar-count">${i.horas}h (${Math.round(i.pct*100)}%)</div>
+      </div>`;
+    });
+    return h + `</div>`;
+  }
+
   html += distSection('Por responsável', ins.by_responsavel, '👤');
   html += distSection('Por tipo de chamado', ins.by_tipo, '🏷️');
   html += distSection('Top clientes no período', ins.by_cliente, '🏢');
+  html += horasSection('Top clientes por horas consumidas', ins.by_cliente_horas, '🕐', ins.total_horas_periodo);
   html += distSection('Por status atual', ins.by_status, '📌');
 
   return html;
