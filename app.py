@@ -292,6 +292,29 @@ def api_debug_assets():
     return resp
 
 
+@app.route("/api/debug/assets-aql")
+@require_auth
+def api_debug_assets_aql():
+    """Debug temporário: testa a busca em lote de objetos do Assets via AQL."""
+    workspace_id = request.args.get("workspace_id", "")
+    aql = request.args.get("aql", 'objectType = "Contrato sustentação"')
+    if not workspace_id:
+        return jsonify({"error": "informe ?workspace_id=..."}), 400
+
+    client = JiraClient(
+        base_url=os.environ["JIRA_BASE_URL"],
+        email=os.environ["JIRA_EMAIL"],
+        api_token=os.environ["JIRA_API_TOKEN"],
+    )
+    try:
+        objects = client.search_assets_objects_aql(workspace_id, aql)
+        resp = jsonify({"status": "OK", "total_encontrado": len(objects), "objetos": objects})
+    except Exception as e:
+        resp = jsonify({"status": "FALHOU", "erro": str(e)})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 # Inicia o refresh em background assim que o processo sobe (Gunicorn ou
 # `python app.py`), para o cache já vir quente na primeira visita.
 _refresher_thread = threading.Thread(target=_background_refresher, daemon=True)
