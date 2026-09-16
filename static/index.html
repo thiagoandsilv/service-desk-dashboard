@@ -52,6 +52,7 @@
   .tab[data-tab="n1"].active{ border-top: 3px solid var(--n1-title); }
   .tab[data-tab="trend"].active{ border-top: 3px solid var(--overview); }
   .tab[data-tab="insights"].active{ border-top: 3px solid var(--n1-title); }
+  .tab[data-tab="contracts"].active{ border-top: 3px solid var(--red-title); }
 
   .live-status{
     font-size: 11.5px; color: var(--text-dim); padding: 0 8px 8px; white-space:nowrap;
@@ -241,6 +242,7 @@
       <div class="tab" data-tab="n1">👥 N1</div>
       <div class="tab" data-tab="trend">📈 Tendência</div>
       <div class="tab" data-tab="insights">📋 Insights</div>
+      <div class="tab" data-tab="contracts">📄 Contratos</div>
     </div>
     <div class="live-status" id="liveStatus">
       <button class="refresh-btn" id="refreshBtn" title="Buscar dados mais recentes agora">🔄 Atualizar</button>
@@ -266,6 +268,7 @@ let currentTab = 'overview';
 let lastData = null;
 let lastHistory = {history: [], enabled: false};
 let lastInsights = null;
+let lastContracts = null;
 // filtros selecionados em cada aba de faixa ('' = todos)
 const bandFilter = {green:'', yellow:'', orange:'', red:'', n1:''};
 const statusFilter = {green:'', yellow:'', orange:'', red:'', n1:''};
@@ -675,6 +678,10 @@ function wireTrendEvents(){
   });
 }
 
+function escapeHtml(s){
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function renderInsightsPanel(ins){
   if (!ins){
     return `<div class="titlebar n1">📋 Insights para Reunião</div>
@@ -731,10 +738,6 @@ function renderInsightsPanel(ins){
 
   // ---- linhas de distribuição: rótulo completo (sem truncar) numa
   // linha, com a contagem ao lado; barra fina e compacta embaixo ----
-  function escapeHtml(s){
-    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
   function ibarRow(label, qtd, pct, max, color){
     const pctTxt = pct != null ? ` (${Math.round(pct*100)}%)` : '';
     const widthPct = Math.max((qtd / max) * 100, 3);
@@ -787,6 +790,70 @@ function renderInsightsPanel(ins){
   return html;
 }
 
+function renderContractsPanel(data){
+  if (!data){
+    return `<div class="titlebar red">📄 Franquia de Horas por Contrato</div>
+      <div class="trend-empty">Calculando a partir do Jira Assets, isso pode levar alguns segundos na primeira vez…</div>`;
+  }
+
+  let html = `<div class="titlebar red">📄 Franquia de Horas por Contrato — ${data.total_contratos} contrato(s) ativo(s)  |  atualizado em ${data.generated_at}</div>`;
+
+  html += `<div class="insight-toolbar">
+    <button class="backfill-btn" id="contractsRefreshBtn">🔄 Recalcular agora</button>
+    <span id="contractsRefreshStatus" class="backfill-status"></span>
+  </div>`;
+
+  const dqLevel = data.n_estourados > 0 ? 'alerta' : 'ok';
+  html += `<div class="insight-alert ${dqLevel}">
+    <div class="insight-alert-icon">${data.n_estourados > 0 ? '⚠️' : '✅'}</div>
+    <div>
+      <div class="insight-alert-title">${data.n_estourados} contrato(s) com franquia de horas estourada</div>
+      <div class="insight-alert-sub">No total, ${data.total_consumidas}h consumidas de ${data.total_franquia}h contratadas entre todos os contratos ativos.</div>
+    </div>
+  </div>`;
+
+  html += `<div class="insight-section">`;
+  data.contratos.forEach(c => {
+    const pctTxt = c.pct_consumido != null ? `${Math.round(c.pct_consumido*100)}%` : '—';
+    const color = c.estourado ? '#C0392B' : (c.pct_consumido != null && c.pct_consumido > 0.8 ? '#D35400' : '#1E8449');
+    const barPct = c.franquia > 0 ? Math.min((c.consumidas / c.franquia) * 100, 100) : (c.consumidas > 0 ? 100 : 0);
+    html += `<div class="ibar-row">
+      <div class="ibar-label" title="${escapeHtml(c.contrato)}">${escapeHtml(c.cliente)}</div>
+      <div class="ibar-track"><div class="ibar-fill" style="width:${Math.max(barPct,2).toFixed(1)}%; background:${color}"></div></div>
+      <div class="ibar-count">${c.consumidas}h / ${c.franquia}h (${pctTxt})</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  return html;
+}
+
+function wireContractsEvents(){
+  const btn = document.getElementById('contractsRefreshBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const statusEl = document.getElementById('contractsRefreshStatus');
+    btn.disabled = true;
+    statusEl.className = 'backfill-status';
+    statusEl.textContent = 'recalculando…';
+    try{
+      const res = await fetch('/api/contracts?force=1', {cache: 'no-store'});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      lastContracts = data;
+      document.getElementById('panel-contracts').innerHTML = renderContractsPanel(lastContracts);
+      wireContractsEvents();
+      const newStatus = document.getElementById('contractsRefreshStatus');
+      if (newStatus){ newStatus.className = 'backfill-status ok'; newStatus.textContent = '✓ atualizado'; }
+    } catch(e){
+      statusEl.className = 'backfill-status err';
+      statusEl.textContent = 'erro: ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 function wireInsightsEvents(){
   const btn = document.getElementById('insightsRefreshBtn');
   if (!btn) return;
@@ -824,6 +891,7 @@ function render(DATA){
   html += `<div class="panel" id="panel-n1">${renderBandPanel(DATA, 'n1')}</div>`;
   html += `<div class="panel" id="panel-trend">${renderTrendPanel(lastHistory)}</div>`;
   html += `<div class="panel" id="panel-insights">${renderInsightsPanel(lastInsights)}</div>`;
+  html += `<div class="panel" id="panel-contracts">${renderContractsPanel(lastContracts)}</div>`;
 
   content.innerHTML = html;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -831,6 +899,7 @@ function render(DATA){
   wireBandFilterEvents();
   wireTrendEvents();
   wireInsightsEvents();
+  wireContractsEvents();
 }
 
 document.getElementById('tabbar').addEventListener('click', (e) => {
@@ -874,6 +943,14 @@ async function loadData(manual){
         const insRes = await fetch('/api/insights', {cache: 'no-store'});
         if (insRes.ok) lastInsights = await insRes.json();
       } catch(insErr){ /* aba de Insights mostra o estado de carregando */ }
+    }
+
+    // mesma lógica pros contratos (Jira Assets) — busca só uma vez por sessão
+    if (!lastContracts){
+      try{
+        const conRes = await fetch('/api/contracts', {cache: 'no-store'});
+        if (conRes.ok) lastContracts = await conRes.json();
+      } catch(conErr){ /* aba de Contratos mostra o estado de carregando */ }
     }
 
     render(data);
