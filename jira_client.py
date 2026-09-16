@@ -62,6 +62,26 @@ class JiraClient:
         resp.raise_for_status()
         return resp.json()
 
+    def search_assets_objects_aql(self, workspace_id: str, aql: str,
+                                   max_results: int = 100) -> list[dict[str, Any]]:
+        """Busca objetos do Jira Assets via AQL (Assets Query Language),
+        paginando automaticamente. Ex de aql: 'objectType = "Contrato sustentação"'.
+        """
+        url = f"https://api.atlassian.com/jsm/assets/workspace/{workspace_id}/v1/object/aql"
+        objects: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            body = {"qlQuery": aql, "page": page, "resultsPerPage": max_results}
+            resp = self._session.post(url, json=body, timeout=self.timeout)
+            resp.raise_for_status()
+            data = resp.json()
+            values = data.get("values", [])
+            objects.extend(values)
+            if not values or not data.get("hasMoreResults") or page >= 50:
+                break
+            page += 1
+        return objects
+
     # ------------------------------------------------------------------
     def search(self, jql: str, fields: list[str] | None = None,
                max_pages: int = 10, page_size: int = 100) -> Iterator[dict[str, Any]]:
