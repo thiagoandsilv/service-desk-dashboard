@@ -71,9 +71,14 @@ class JiraClient:
         número de página — e devolve no máximo 25 itens por vez mesmo
         pedindo mais, então o loop sempre continua até acumular tudo
         conforme o campo "total" da resposta.
+
+        Como os objetos podem ser atualizados por automação enquanto
+        paginamos (o que bagunça a ordem entre uma página e outra), o
+        resultado final é deduplicado por objectId como proteção extra
+        — mesmo que a query não tenha uma ordenação 100% estável.
         """
         url = f"https://api.atlassian.com/jsm/assets/workspace/{workspace_id}/v1/object/aql"
-        objects: list[dict[str, Any]] = []
+        raw_objects: list[dict[str, Any]] = []
         start_at = 0
         safety_pages = 0
         while True:
@@ -82,12 +87,21 @@ class JiraClient:
             resp.raise_for_status()
             data = resp.json()
             values = data.get("values", [])
-            objects.extend(values)
-            total = data.get("total", len(objects))
+            raw_objects.extend(values)
+            total = data.get("total", len(raw_objects))
             start_at += len(values)
             safety_pages += 1
             if not values or start_at >= total or safety_pages >= 50:
                 break
+
+        seen_ids: set[str] = set()
+        objects: list[dict[str, Any]] = []
+        for obj in raw_objects:
+            obj_id = str(obj.get("id"))
+            if obj_id in seen_ids:
+                continue
+            seen_ids.add(obj_id)
+            objects.append(obj)
         return objects
 
     def debug_aql_raw_meta(self, workspace_id: str, aql: str,
