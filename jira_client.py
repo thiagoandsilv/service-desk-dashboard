@@ -108,16 +108,22 @@ class JiraClient:
                             max_results: int = 100, start_at: int = 0) -> dict[str, Any]:
         """Diagnóstico temporário: faz UMA chamada e devolve tudo, exceto
         a lista 'values' completa (só as chaves dos objetos), pra
-        conferir se start_at realmente muda o resultado."""
+        conferir se start_at realmente muda o resultado.
+
+        Dessa vez manda startAt/maxResults como query string (não no
+        corpo) — outro padrão comum nas APIs da Atlassian, já que
+        mandar no corpo não teve efeito nenhum."""
         url = f"https://api.atlassian.com/jsm/assets/workspace/{workspace_id}/v1/object/aql"
-        body = {"qlQuery": aql, "startAt": start_at, "maxResults": max_results}
-        resp = self._session.post(url, json=body, timeout=self.timeout)
+        params = {"startAt": start_at, "maxResults": max_results}
+        body = {"qlQuery": aql}
+        resp = self._session.post(url, params=params, json=body, timeout=self.timeout)
         resp.raise_for_status()
         data = resp.json()
         values = data.get("values", [])
         meta = {k: v for k, v in data.items() if k != "values"}
         meta["values_count_nesta_pagina"] = len(values)
         meta["object_keys_nesta_pagina"] = [v.get("objectKey") or v.get("id") for v in values]
+        meta["request_params"] = params
         return meta
 
     # ------------------------------------------------------------------
