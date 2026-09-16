@@ -116,7 +116,7 @@ def _background_refresher():
 def _refresh_insights_cache():
     with _insights_refresh_in_progress:
         try:
-            data = insights.build_insights(days=30)
+            data = insights.build_insights()
             with _insights_lock:
                 _insights_cache["data"] = data
                 _insights_cache["fetched_at"] = time.time()
