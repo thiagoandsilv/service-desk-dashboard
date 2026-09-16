@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Service Desk por Faixa — SUPORTE</title>
+<style>
+  :root{
+    --navy: #1F3864;
+    --overview: #0D47A1;
+    --green-title: #1E8449;
+    --yellow-title: #B8860B;
+    --orange-title: #D35400;
+    --red-title: #C0392B;
+    --n1-title: #6C3483;
+    --row-a: #FFFFFF;
+    --row-b: #F9F9F9;
+    --green-fill: #D4EDDA; --green-font: #155724;
+    --yellow-fill: #FFF9C4; --yellow-font: #856404;
+    --orange-fill: #FFE0B2; --orange-font: #BF360C;
+    --red-fill: #FFCDD2; --red-font: #B71C1C;
+    --total-fill: #BDD7EE;
+    --border: #BFBFBF;
+    --text: #1A1A1A;
+    --text-dim: #5A5A5A;
+    --bg: #EAEEF3;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background: var(--bg); color: var(--text);
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 24px 20px 60px;
+  }
+  .sheet{ max-width: 1180px; margin: 0 auto; background: #fff; border: 1px solid var(--border); }
+  .tabbar{
+    display:flex; gap:2px; padding: 10px 10px 0; background: #DCE3EC;
+    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+    justify-content: space-between; align-items:flex-end;
+  }
+  .tabs-left{ display:flex; gap:2px; flex-wrap:wrap; }
+  .tab{
+    padding: 9px 16px; font-size: 13px; font-weight: bold; cursor:pointer;
+    background: #C9D2DF; color: #33415C; border: 1px solid var(--border); border-bottom:none;
+    border-radius: 4px 4px 0 0; user-select:none;
+  }
+  .tab.active{ background:#fff; color: var(--text); }
+  .tab[data-tab="overview"].active{ border-top: 3px solid var(--overview); }
+  .tab[data-tab="green"].active{ border-top: 3px solid var(--green-title); }
+  .tab[data-tab="yellow"].active{ border-top: 3px solid var(--yellow-title); }
+  .tab[data-tab="orange"].active{ border-top: 3px solid var(--orange-title); }
+  .tab[data-tab="red"].active{ border-top: 3px solid var(--red-title); }
+  .tab[data-tab="n1"].active{ border-top: 3px solid var(--n1-title); }
+  .tab[data-tab="trend"].active{ border-top: 3px solid var(--overview); }
+  .tab[data-tab="insights"].active{ border-top: 3px solid var(--n1-title); }
+  .tab[data-tab="contracts"].active{ border-top: 3px solid var(--red-title); }
+
+  .live-status{
+    font-size: 11.5px; color: var(--text-dim); padding: 0 8px 8px; white-space:nowrap;
+    display:flex; align-items:center; gap:10px;
+  }
+  .live-dot{
+    display:inline-block; width:7px; height:7px; border-radius:50%;
+    background:#2ECC71; margin-right:5px; box-shadow:0 0 6px #2ECC71;
+  }
+  .live-dot.stale{ background:#F0C24B; box-shadow:0 0 6px #F0C24B; }
+  .live-dot.err{ background:#E74C3C; box-shadow:0 0 6px #E74C3C; }
+  .refresh-btn{
+    font-size: 12px; font-weight:bold; color: #fff; background: var(--overview);
+    border:none; padding: 6px 12px; border-radius: 3px; cursor:pointer;
+  }
+  .refresh-btn:hover{ background: #123a75; }
+  .refresh-btn:disabled{ opacity: 0.6; cursor: default; }
+  .refresh-btn.spinning{ animation: spin-fade 0.9s linear infinite; }
+  @keyframes spin-fade{ 50%{ opacity: 0.55; } }
+
+  .filter-bar{
+    display:flex; align-items:center; gap: 10px; padding: 12px 16px;
+    background:#F4F6F9; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .filter-bar label{ font-size: 12.5px; font-weight:bold; color: var(--text-dim); }
+  .filter-bar select{
+    font-size: 13px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px;
+    background:#fff; color: var(--text); min-width: 180px; max-width: 260px;
+  }
+  .filter-bar .filter-count{ font-size: 12px; color: var(--text-dim); }
+  .filter-bar .filter-clear{
+    font-size: 12px; color: var(--overview); cursor:pointer; text-decoration: underline;
+    text-underline-offset: 2px; display:none;
+  }
+  .download-btn{
+    font-size: 12.5px; font-weight:bold; color: #fff; background: #2E7D32;
+    border:none; padding: 6px 12px; border-radius: 3px; cursor:pointer;
+    margin-left: auto;
+  }
+  .download-btn:hover{ background: #256428; }
+
+  .n1-stats{
+    display:flex; align-items:center; gap: 16px; padding: 14px 16px;
+    background:#F4F6F9; border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .n1-stat-card{
+    display:flex; align-items:baseline; gap: 8px; padding: 8px 16px;
+    border-radius: 4px; border: 1px solid;
+  }
+  .n1-stat-card.ok{ background:#D4EDDA; border-color:#B7DDC0; }
+  .n1-stat-card.atencao{ background:#FFE0B2; border-color:#F0C48A; }
+  .n1-stat-card.alerta{ background:#FFCDD2; border-color:#F0AAAF; }
+  .n1-stat-num{ font-size: 24px; font-weight:bold; color: var(--text); font-family: Arial; }
+  .n1-stat-label{ font-size: 12.5px; color: var(--text-dim); }
+  .n1-stat-sub{ font-size: 12.5px; color: var(--text-dim); }
+
+  .trend-empty{
+    padding: 40px 24px; text-align:center; color: var(--text-dim); font-size: 13.5px;
+    line-height: 1.6;
+  }
+  .trend-empty code{
+    background:#F0F2F5; padding: 1px 6px; border-radius: 3px; font-family: 'Courier New', monospace;
+  }
+  .trend-chart-wrap{ padding: 20px 20px 8px; background:#fff; border-bottom: 1px solid var(--border); }
+
+  .backfill-bar{
+    display:flex; align-items:center; gap: 12px; padding: 12px 16px;
+    background:#F4F6F9; border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .backfill-btn{
+    font-size: 12.5px; font-weight:bold; color: #fff; background: #6C3483;
+    border:none; padding: 7px 14px; border-radius: 3px; cursor:pointer;
+  }
+  .backfill-btn:hover{ background: #572A6A; }
+  .backfill-btn:disabled{ opacity: 0.6; cursor: default; }
+  .backfill-hint{ font-size: 11.5px; color: var(--text-dim); }
+  .backfill-status{ font-size: 12px; font-weight:bold; }
+  .backfill-status.ok{ color: #155724; }
+  .backfill-status.err{ color: #B71C1C; }
+
+  .insight-toolbar{
+    display:flex; align-items:center; gap: 12px; padding: 12px 16px;
+    background:#F4F6F9; border-bottom: 1px solid var(--border);
+  }
+
+  .insight-alert{
+    display:flex; gap: 14px; align-items:flex-start; padding: 16px 20px;
+    margin: 16px; border-radius: 4px; border: 1px solid;
+  }
+  .insight-alert.ok{ background:#D4EDDA; border-color:#B7DDC0; }
+  .insight-alert.atencao{ background:#FFE0B2; border-color:#F0C48A; }
+  .insight-alert.alerta{ background:#FFCDD2; border-color:#F0AAAF; }
+  .insight-alert-icon{ font-size: 22px; line-height:1; }
+  .insight-alert-title{ font-weight:bold; font-size: 13.5px; color: var(--text); margin-bottom: 4px; }
+  .insight-alert-sub{ font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+
+  .insight-section{ padding: 8px 20px 20px; }
+  .insight-section-title{
+    font-weight:bold; font-size: 13.5px; color: var(--text); margin: 12px 0 12px;
+    padding-top: 8px; border-top: 1px solid var(--border);
+  }
+  .insight-section:first-of-type .insight-section-title{ border-top:none; padding-top:0; }
+
+  .weekday-chart-wrap{ padding: 4px 8px 8px; }
+
+  .ibar-row{
+    display:flex; align-items:center; gap: 12px; margin-bottom: 6px;
+  }
+  .ibar-label{
+    width: 230px; flex-shrink:0; font-size: 12.5px; color: var(--text);
+    overflow-wrap: anywhere; line-height: 1.3; white-space: normal;
+  }
+  .ibar-track{
+    width: 130px; flex-shrink:0; height: 8px; background:#E5E9F0;
+    border-radius: 3px; overflow:hidden;
+  }
+  .ibar-fill{ height:100%; border-radius: 3px; }
+  .ibar-count{
+    width: 72px; flex-shrink:0; text-align:right;
+    font-size: 12.5px; font-weight:bold; color: var(--text); white-space:nowrap;
+  }
+
+  .panel{ display:none; padding: 0 0 18px; }
+  .panel.active{ display:block; }
+  .titlebar{ color:#fff; font-weight:bold; font-size: 15px; text-align:center; padding: 12px 16px; }
+  .titlebar.overview{ background: var(--overview); }
+  .titlebar.green{ background: var(--green-title); }
+  .titlebar.yellow{ background: var(--yellow-title); }
+  .titlebar.orange{ background: var(--orange-title); }
+  .titlebar.red{ background: var(--red-title); }
+  .titlebar.n1{ background: var(--n1-title); }
+
+  table{ width:100%; border-collapse: collapse; font-size: 12.5px; }
+  thead th{
+    background: var(--navy); color:#fff; font-weight:bold; font-size: 11.5px;
+    padding: 8px 10px; text-align:center; border: 1px solid var(--border);
+    position: sticky; top:0; z-index:1;
+  }
+  tbody td{ padding: 7px 10px; border: 1px solid var(--border); text-align:center; }
+  tbody td.left{ text-align:left; }
+  tbody tr.row-a td{ background: var(--row-a); }
+  tbody tr.row-b td{ background: var(--row-b); }
+
+  tr.ov-green td{ background: var(--green-fill); }
+  tr.ov-green td.qtd{ color: var(--green-font); font-weight:bold; }
+  tr.ov-yellow td{ background: var(--yellow-fill); }
+  tr.ov-yellow td.qtd{ color: var(--yellow-font); font-weight:bold; }
+  tr.ov-orange td{ background: var(--orange-fill); }
+  tr.ov-orange td.qtd{ color: var(--orange-font); font-weight:bold; }
+  tr.ov-red td{ background: var(--red-fill); }
+  tr.ov-red td.qtd{ color: var(--red-font); font-weight:bold; }
+  tr.ov-total td{ background: var(--total-fill); font-weight:bold; }
+
+  .subtitle{ padding: 16px 16px 6px; font-weight:bold; font-size: 13.5px; }
+  .days-green{ color: var(--green-font); font-weight:bold; }
+  .days-yellow{ color: var(--yellow-font); font-weight:bold; }
+  .days-orange{ color: var(--orange-font); font-weight:bold; }
+  .days-red{ color: var(--red-font); font-weight:bold; }
+
+  .scrollwrap{ max-height: 560px; overflow-y:auto; }
+  .meta{ padding: 10px 16px; font-size: 11.5px; color: var(--text-dim); text-align:right;
+    background:#F4F6F9; border-top: 1px solid var(--border); }
+  .resp-cell{ text-align:left; }
+  .chamado-link{
+    color: var(--overview); text-decoration: none; font-weight: bold;
+  }
+  .chamado-link:hover{ text-decoration: underline; }
+  .band-pill{
+    display:inline-block; width:9px; height:9px; border-radius:2px; margin-right: 6px; vertical-align:middle;
+  }
+  .loading, .error-box{ padding: 40px; text-align:center; color: var(--text-dim); }
+  .error-box{ color: var(--red-font); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+</head>
+<body>
+
+<div class="sheet">
+  <div class="tabbar">
+    <div class="tabs-left" id="tabbar">
+      <div class="tab active" data-tab="overview">📊 Visão Geral</div>
+      <div class="tab" data-tab="green">🟢 Até 7 dias</div>
+      <div class="tab" data-tab="yellow">🟡 8 a 15 dias</div>
+      <div class="tab" data-tab="orange">🟠 16 a 50 dias</div>
+      <div class="tab" data-tab="red">🔴 Acima de 50 dias</div>
+      <div class="tab" data-tab="n1">👥 N1</div>
+      <div class="tab" data-tab="trend">📈 Tendência</div>
+      <div class="tab" data-tab="insights">📋 Insights</div>
+      <div class="tab" data-tab="contracts">📄 Contratos</div>
+    </div>
+    <div class="live-status" id="liveStatus">
+      <button class="refresh-btn" id="refreshBtn" title="Buscar dados mais recentes agora">🔄 Atualizar</button>
+      <span><span class="live-dot" id="liveDot"></span><span id="liveText">conectando…</span></span>
+    </div>
+  </div>
+
+  <div id="content">
+    <div class="loading">Carregando dados do Jira…</div>
+  </div>
+</div>
+
+<script>
+const BAND_ROWCLASS = {green:'ov-green', yellow:'ov-yellow', orange:'ov-orange', red:'ov-red'};
+const BAND_DAYSCLASS = {green:'days-green', yellow:'days-yellow', orange:'days-orange', red:'days-red'};
+const BAND_TITLECLASS = {green:'green', yellow:'yellow', orange:'orange', red:'red', n1:'n1'};
+const BAND_PILL_COLOR = {green:'#1E8449', yellow:'#B8860B', orange:'#D35400', red:'#C0392B'};
+const BAND_SHORT_LABEL = {green:'Até 7d', yellow:'8-15d', orange:'16-50d', red:'+50d'};
+const BAND_FILE_SLUG = {green:'ate-7-dias', yellow:'8-15-dias', orange:'16-50-dias', red:'acima-50-dias', n1:'N1'};
+const BAND_ORDER = ['green','yellow','orange','red'];
+
+let currentTab = 'overview';
+let lastData = null;
+let lastHistory = {history: [], enabled: false};
+let lastInsights = null;
+let lastContracts = null;
+// filtros selecionados em cada aba de faixa ('' = todos)
+const bandFilter = {green:'', yellow:'', orange:'', red:'', n1:''};
+const statusFilter = {green:'', yellow:'', orange:'', red:'', n1:''};
+
+function jiraLink(DATA, key){
+  const base = (DATA.jira_base_url || '').replace(/\/$/, '');
+  if (!base) return key;
+  return `<a class="chamado-link" href="${base}/browse/${key}" target="_blank" rel="noopener noreferrer">${key}</a>`;
+}
+
+function renderOverview(DATA){
+  let html = `
+    <div class="titlebar overview">📊 Visão Geral — Chamados Service Desk SUPORTE por Faixa  |  ${DATA.report_date.split(' ')[0]}</div>
+    <table>
+      <thead><tr>
+        <th style="text-align:left;">Faixa</th><th>Qtd</th><th>% do Total</th>
+        <th>Mais Antigo (d)</th><th>Mais Recente (d)</th><th>Média (d)</th><th>Sem Responsável</th>
+      </tr></thead>
+      <tbody>`;
+  DATA.overview_rows.forEach(r => {
+    html += `<tr class="${BAND_ROWCLASS[r.band]}">
+      <td class="left">${r.label}</td><td class="qtd">${r.qtd}</td>
+      <td>${(r.pct*100).toFixed(1)}%</td><td>${r.mais_antigo}</td>
+      <td>${r.mais_recente}</td><td>${r.media}</td><td>${r.sem_resp}</td></tr>`;
+  });
+  html += `<tr class="ov-total"><td class="left">TOTAL</td><td>${DATA.total}</td><td>100%</td>
+    <td></td><td></td><td>${DATA.media_total}</td><td>${DATA.sem_resp_total}</td></tr>`;
+  html += `</tbody></table>
+      <div class="subtitle">👤 Top Responsáveis por Faixa de Tempo</div>
+      <table>
+        <thead><tr>
+          <th style="text-align:left;">Responsável</th><th>Até 7d</th><th>8-15d</th>
+          <th>16-50d</th><th>+50d</th><th>Total</th><th>% do Total</th>
+        </tr></thead><tbody>`;
+  DATA.top_responsaveis.forEach((r,i) => {
+    html += `<tr class="${i % 2 === 0 ? 'row-a' : 'row-b'}">
+      <td class="resp-cell" style="font-weight:bold;">${r.name}</td>
+      <td>${r.green}</td><td>${r.yellow}</td><td>${r.orange}</td><td>${r.red}</td>
+      <td style="font-weight:bold;">${r.total}</td><td>${(r.pct*100).toFixed(1)}%</td></tr>`;
+  });
+  html += `</tbody></table>`;
+  return html;
+}
+
+function renderN1Stats(rows){
+  const total = rows.length;
+  const acima2 = rows.filter(r => r.dias_aberto > 2).length;
+  const pct = total ? (acima2 / total * 100).toFixed(1) : '0.0';
+  const nivel = total === 0 ? 'ok' : (acima2 / total > 0.5 ? 'alerta' : (acima2 > 0 ? 'atencao' : 'ok'));
+  return `
+    <div class="n1-stats">
+      <div class="n1-stat-card ${nivel}">
+        <div class="n1-stat-num">${acima2}</div>
+        <div class="n1-stat-label">chamado(s) acima de 2 dias</div>
+      </div>
+      <div class="n1-stat-sub">${acima2} de ${total} (${pct}%) dos chamados exibidos estão com mais de 2 dias em aberto</div>
+    </div>`;
+}
+
+function renderBandPanel(DATA, band){
+  const allRows = DATA.band_sheets[band];
+  const label = DATA.band_label[band];
+  const responsaveis = [...new Set(allRows.map(r => r.responsavel))].sort((a,b) => a.localeCompare(b));
+  const statuses = [...new Set(allRows.map(r => r.status))].sort((a,b) => a.localeCompare(b));
+  const selResp = bandFilter[band];
+  const selStatus = statusFilter[band];
+  const rows = allRows.filter(r =>
+    (!selResp || r.responsavel === selResp) && (!selStatus || r.status === selStatus));
+  const anyFilterActive = selResp || selStatus;
+  const titleLabel = band === 'n1' && DATA.n1_users
+    ? `👥 N1 — ${DATA.n1_users.join(', ')}`
+    : label;
+
+  let html = `<div class="titlebar ${BAND_TITLECLASS[band]}">${titleLabel}  —  ${allRows.length} chamado(s)  |  ${DATA.report_date.split(' ')[0]}</div>
+    <div class="filter-bar">
+      <label for="filter-resp-${band}">Responsável:</label>
+      <select id="filter-resp-${band}" data-band="${band}" class="band-filter-select">
+        <option value="">Todos (${allRows.length})</option>
+        ${responsaveis.map(name => {
+          const count = allRows.filter(r => r.responsavel === name).length;
+          const sel = name === selResp ? 'selected' : '';
+          return `<option value="${name.replace(/"/g,'&quot;')}" ${sel}>${name} (${count})</option>`;
+        }).join('')}
+      </select>
+      <label for="filter-status-${band}">Status:</label>
+      <select id="filter-status-${band}" data-band="${band}" class="status-filter-select">
+        <option value="">Todos (${allRows.length})</option>
+        ${statuses.map(st => {
+          const count = allRows.filter(r => r.status === st).length;
+          const sel = st === selStatus ? 'selected' : '';
+          return `<option value="${st.replace(/"/g,'&quot;')}" ${sel}>${st} (${count})</option>`;
+        }).join('')}
+      </select>
+      <span class="filter-count">${rows.length} de ${allRows.length} chamado(s)</span>
+      <span class="filter-clear" data-band="${band}" style="${anyFilterActive ? 'display:inline;' : ''}">limpar filtros</span>
+      <button class="download-btn" data-band="${band}">⬇️ Baixar Excel</button>
+    </div>
+    ${band === 'n1' ? renderN1Stats(rows) : ''}
+    <div class="scrollwrap"><table>
+    <thead><tr>
+      <th>Chamado</th><th>Tipo</th><th style="text-align:left;">Resumo</th><th>Status</th>
+      <th>Prioridade</th><th style="text-align:left;">Responsável</th>
+      <th style="text-align:left;">Solicitante</th><th style="text-align:left;">Cliente</th><th>Criado em</th><th>Últ. Atualiz.</th><th>Dias Aberto</th>
+      ${band === 'n1' ? '<th>Faixa</th>' : ''}
+    </tr></thead><tbody>`;
+  rows.forEach((r,i) => {
+    const faixaCell = band === 'n1'
+      ? `<td><span class="band-pill" style="background:${BAND_PILL_COLOR[r.band] || '#999'}"></span>${BAND_SHORT_LABEL[r.band] || r.band}</td>`
+      : '';
+    html += `<tr class="${i % 2 === 0 ? 'row-a' : 'row-b'}">
+      <td>${jiraLink(DATA, r.key)}</td><td>${r.tipo}</td><td class="left">${r.resumo}</td><td>${r.status}</td>
+      <td>${r.prioridade}</td><td class="left">${r.responsavel}</td>
+      <td class="left">${r.solicitante}</td><td class="left">${r.cliente}</td><td>${r.criado_em}</td><td>${r.atualizado_em}</td>
+      <td class="${BAND_DAYSCLASS[r.band] || ''}">${r.dias_aberto}</td>${faixaCell}</tr>`;
+  });
+  html += `</tbody></table></div>`;
+  return html;
+}
+
+const BAND_FILL_HEX = {green:'D4EDDA', yellow:'FFF9C4', orange:'FFE0B2', red:'FFCDD2'};
+const BAND_FONT_HEX = {green:'155724', yellow:'856404', orange:'BF360C', red:'B71C1C'};
+const BAND_TITLE_HEX = {green:'1E8449', yellow:'B8860B', orange:'D35400', red:'C0392B', n1:'6C3483'};
+const NAVY_HEX = '1F3864';
+const ROW_A_HEX = 'FFFFFF';
+const ROW_B_HEX = 'F9F9F9';
+
+function thinBorder(){
+  const b = {style:'thin', color:{rgb:'BFBFBF'}};
+  return {top:b, bottom:b, left:b, right:b};
+}
+
+function downloadBandXLSX(DATA, band){
+  const allRows = DATA.band_sheets[band];
+  const selResp = bandFilter[band];
+  const selStatus = statusFilter[band];
+  const rows = allRows.filter(r =>
+    (!selResp || r.responsavel === selResp) && (!selStatus || r.status === selStatus));
+
+  const headers = ['Chamado', 'Tipo', 'Resumo', 'Status', 'Prioridade', 'Responsável',
+                    'Solicitante', 'Cliente', 'Criado em', 'Últ. Atualiz.', 'Dias Aberto'];
+  if (band === 'n1') headers.push('Faixa');
+  const nCols = headers.length;
+
+  const titleLabel = band === 'n1' && DATA.n1_users
+    ? `👥 N1 — ${DATA.n1_users.join(', ')}`
+    : DATA.band_label[band];
+  const titleText = `${titleLabel}  —  ${rows.length} chamado(s)  |  ${DATA.report_date.split(' ')[0]}`;
+
+  // monta a matriz de valores: linha 1 = título (mesclado), linha 2 = cabeçalho, resto = dados
+  const aoa = [
+    [titleText, ...Array(nCols - 1).fill('')],
+    headers,
+  ];
+  rows.forEach(r => {
+    const line = [r.key, r.tipo, r.resumo, r.status, r.prioridade, r.responsavel,
+                  r.solicitante, r.cliente, r.criado_em, r.atualizado_em, r.dias_aberto];
+    if (band === 'n1') line.push(BAND_SHORT_LABEL[r.band] || r.band);
+    aoa.push(line);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:nCols-1}}];
+
+  const widths = band === 'n1'
+    ? [12, 14, 45, 18, 12, 22, 22, 22, 16, 12, 10, 10]
+    : [12, 14, 45, 18, 12, 22, 22, 22, 16, 12, 10];
+  ws['!cols'] = widths.map(w => ({wch: w}));
+  ws['!rows'] = [{hpx: 24}, {hpx: 20}];
+
+  // ---- estilo da linha de título ----
+  const titleCellRef = XLSX.utils.encode_cell({r:0, c:0});
+  ws[titleCellRef].s = {
+    fill: {fgColor:{rgb: BAND_TITLE_HEX[band] || NAVY_HEX}},
+    font: {name:'Arial', sz:13, bold:true, color:{rgb:'FFFFFF'}},
+    alignment: {horizontal:'center', vertical:'center'},
+  };
+  // preenche as demais células mescladas da linha de título com a mesma cor
+  for (let c = 1; c < nCols; c++){
+    const ref = XLSX.utils.encode_cell({r:0, c});
+    ws[ref] = ws[ref] || {t:'s', v:''};
+    ws[ref].s = { fill: {fgColor:{rgb: BAND_TITLE_HEX[band] || NAVY_HEX}} };
+  }
+
+  // ---- estilo do cabeçalho ----
+  for (let c = 0; c < nCols; c++){
+    const ref = XLSX.utils.encode_cell({r:1, c});
+    ws[ref].s = {
+      fill: {fgColor:{rgb: NAVY_HEX}},
+      font: {name:'Arial', sz:10, bold:true, color:{rgb:'FFFFFF'}},
+      alignment: {horizontal:'center', vertical:'center'},
+      border: thinBorder(),
+    };
+  }
+
+  // ---- estilo das linhas de dados ----
+  const centeredCols = new Set([0, 3, 4, 8, 9, 10, 11]); // chamado, status, prioridade, datas, dias, faixa
+  rows.forEach((r, i) => {
+    const rowIdx = 2 + i;
+    const baseFill = i % 2 === 0 ? ROW_A_HEX : ROW_B_HEX;
+    for (let c = 0; c < nCols; c++){
+      const ref = XLSX.utils.encode_cell({r: rowIdx, c});
+      const cell = ws[ref];
+      if (!cell) continue;
+      let fill = baseFill;
+      let font = {name:'Arial', sz:9, color:{rgb:'000000'}};
+      if (c === 10){ // Dias Aberto: cor pela faixa real da linha
+        font = {name:'Arial', sz:9, bold:true, color:{rgb: BAND_FONT_HEX[r.band] || '000000'}};
+      }
+      if (band === 'n1' && c === 11){ // Faixa: preenche com a cor da faixa
+        fill = BAND_FILL_HEX[r.band] || baseFill;
+        font = {name:'Arial', sz:9, bold:true, color:{rgb: BAND_FONT_HEX[r.band] || '000000'}};
+      }
+      cell.s = {
+        fill: {fgColor:{rgb: fill}},
+        font,
+        alignment: {horizontal: centeredCols.has(c) ? 'center' : 'left', vertical:'center', wrapText: c===2},
+        border: thinBorder(),
+      };
+    }
+  });
+
+  const wb = XLSX.utils.book_new();
+  const dateSlug = (DATA.report_date.split(' ')[0] || '').split('/').reverse().join('-');
+  const labelSlug = BAND_FILE_SLUG[band] || band;
+  const sheetName = (band === 'n1' ? 'N1' : (BAND_SHORT_LABEL[band] || band)).slice(0, 31);
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, `chamados_${labelSlug}_${dateSlug}.xlsx`);
+}
+
+function wireBandFilterEvents(){
+  document.querySelectorAll('.band-filter-select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const band = e.target.dataset.band;
+      bandFilter[band] = e.target.value;
+      document.getElementById('panel-' + band).innerHTML = renderBandPanel(lastData, band);
+      wireBandFilterEvents();
+    });
+  });
+  document.querySelectorAll('.status-filter-select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const band = e.target.dataset.band;
+      statusFilter[band] = e.target.value;
+      document.getElementById('panel-' + band).innerHTML = renderBandPanel(lastData, band);
+      wireBandFilterEvents();
+    });
+  });
+  document.querySelectorAll('.filter-clear').forEach(el => {
+    el.addEventListener('click', (e) => {
+      const band = e.target.dataset.band;
+      bandFilter[band] = '';
+      statusFilter[band] = '';
+      document.getElementById('panel-' + band).innerHTML = renderBandPanel(lastData, band);
+      wireBandFilterEvents();
+    });
+  });
+  document.querySelectorAll('.download-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const band = e.target.dataset.band;
+      downloadBandXLSX(lastData, band);
+    });
+  });
+}
+
+function renderTrendPanel(historyResp){
+  const enabled = historyResp && historyResp.enabled;
+  const history = (historyResp && historyResp.history) || [];
+
+  const backfillBtn = `
+    <div class="backfill-bar">
+      <button class="backfill-btn" id="backfillBtn">🕐 Preencher histórico retroativo</button>
+      <span class="backfill-hint">Calcula os últimos 30 dias a partir do que o Jira já guarda (criação/resolução) — não precisa esperar dia a dia.</span>
+      <span id="backfillStatus" class="backfill-status"></span>
+    </div>`;
+
+  if (!enabled){
+    return `<div class="titlebar overview">📈 Tendência do Backlog (últimos 30 dias)</div>
+      <div class="trend-empty">
+        Histórico ainda não está configurado neste servidor (variável <code>REDIS_URL</code> ausente).
+        Assim que for configurado, os snapshots diários começam a aparecer aqui.
+      </div>`;
+  }
+  if (history.length < 2){
+    return `<div class="titlebar overview">📈 Tendência do Backlog (últimos 30 dias)</div>
+      ${backfillBtn}
+      <div class="trend-empty">
+        Ainda não há histórico suficiente (${history.length} dia${history.length===1?'':'s'} registrado${history.length===1?'':'s'}).
+        O gráfico aparece a partir do 2º dia de coleta — ou use o botão acima para preencher retroativamente agora.
+      </div>`;
+  }
+
+  // ---- gráfico de linha (SVG, sem biblioteca externa) ----
+  const W = 900, H = 260, padL = 40, padR = 16, padT = 16, padB = 32;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const totals = history.map(h => h.total);
+  const maxVal = Math.max(...totals, 1);
+  const niceMax = Math.ceil(maxVal * 1.15 / 5) * 5 || 5;
+
+  const xFor = (i) => padL + (history.length === 1 ? 0 : (i / (history.length - 1)) * innerW);
+  const yFor = (v) => padT + innerH - (v / niceMax) * innerH;
+
+  const linePoints = history.map((h, i) => `${xFor(i)},${yFor(h.total)}`).join(' ');
+  const areaPoints = `${padL},${padT+innerH} ${linePoints} ${xFor(history.length-1)},${padT+innerH}`;
+
+  const gridLines = [0, 0.25, 0.5, 0.75, 1].map(f => {
+    const val = Math.round(niceMax * f);
+    const y = yFor(val);
+    return `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#E5E9F0" stroke-width="1"/>
+            <text x="${padL-8}" y="${y+4}" text-anchor="end" font-size="10" fill="#5A5A5A" font-family="Arial">${val}</text>`;
+  }).join('');
+
+  // rótulos no eixo X: mostra no máximo ~8 datas pra não empilhar texto
+  const labelEvery = Math.max(1, Math.ceil(history.length / 8));
+  const xLabels = history.map((h, i) => {
+    if (i % labelEvery !== 0 && i !== history.length - 1) return '';
+    const [y,m,d] = h.date.split('-');
+    return `<text x="${xFor(i)}" y="${H-10}" text-anchor="middle" font-size="10" fill="#5A5A5A" font-family="Arial">${d}/${m}</text>`;
+  }).join('');
+
+  const dots = history.map((h, i) => {
+    const [y,m,d] = h.date.split('-');
+    return `<circle cx="${xFor(i)}" cy="${yFor(h.total)}" r="3.5" fill="#0D47A1" stroke="#fff" stroke-width="1.5">
+      <title>${d}/${m}/${y}: ${h.total} chamado(s) em aberto</title>
+    </circle>`;
+  }).join('');
+
+  const svg = `
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:auto; display:block;">
+      ${gridLines}
+      <polygon points="${areaPoints}" fill="#0D47A1" fill-opacity="0.08"/>
+      <polyline points="${linePoints}" fill="none" stroke="#0D47A1" stroke-width="2.5"/>
+      ${dots}
+      ${xLabels}
+    </svg>`;
+
+  // ---- tabela detalhada (mais recente primeiro) ----
+  const rowsDesc = [...history].reverse();
+  const tableRows = rowsDesc.map((h, i) => {
+    const prev = rowsDesc[i + 1]; // dia anterior (lista está em ordem decrescente)
+    const diff = prev ? h.total - prev.total : null;
+    let diffHtml = '<span style="color:#5A5A5A;">—</span>';
+    if (diff !== null){
+      if (diff > 0) diffHtml = `<span style="color:#B71C1C; font-weight:bold;">▲ +${diff}</span>`;
+      else if (diff < 0) diffHtml = `<span style="color:#155724; font-weight:bold;">▼ ${diff}</span>`;
+      else diffHtml = `<span style="color:#5A5A5A;">= 0</span>`;
+    }
+    const [y,m,d] = h.date.split('-');
+    const fill = i % 2 === 0 ? 'row-a' : 'row-b';
+    return `<tr class="${fill}">
+      <td>${d}/${m}/${y}</td>
+      <td style="font-weight:bold;">${h.total}</td>
+      <td>${diffHtml}</td>
+      <td>${h.abertos_hoje ?? '—'}</td>
+      <td><span class="band-pill" style="background:#3ECF8E"></span>${h.green}</td>
+      <td><span class="band-pill" style="background:#F0C24B"></span>${h.yellow}</td>
+      <td><span class="band-pill" style="background:#F1934C"></span>${h.orange}</td>
+      <td><span class="band-pill" style="background:#F0554D"></span>${h.red}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="titlebar overview">📈 Tendência do Backlog (últimos ${history.length} dias)</div>
+    ${backfillBtn}
+    <div class="trend-chart-wrap">${svg}</div>
+    <div class="scrollwrap"><table>
+      <thead><tr>
+        <th>Data</th><th>Total Aberto</th><th>Variação</th><th>Abertos no dia</th>
+        <th>🟢 Até 7d</th><th>🟡 8-15d</th><th>🟠 16-50d</th><th>🔴 +50d</th>
+      </tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table></div>`;
+}
+
+function wireTrendEvents(){
+  const btn = document.getElementById('backfillBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const statusEl = document.getElementById('backfillStatus');
+    btn.disabled = true;
+    statusEl.className = 'backfill-status';
+    statusEl.textContent = 'calculando a partir do histórico do Jira…';
+    try{
+      const res = await fetch('/api/backfill?days=30', {method: 'POST'});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      statusEl.className = 'backfill-status ok';
+      statusEl.textContent = `✓ ${data.dias_gravados} dia(s) preenchidos (${data.periodo.de} a ${data.periodo.ate})`;
+
+      const histRes = await fetch('/api/history?days=30', {cache: 'no-store'});
+      if (histRes.ok){
+        lastHistory = await histRes.json();
+        document.getElementById('panel-trend').innerHTML = renderTrendPanel(lastHistory);
+        wireTrendEvents();
+        // o innerHTML acima recria a barra de status vazia; repõe a mensagem
+        // de sucesso nela pra não sumir na hora.
+        const newStatusEl = document.getElementById('backfillStatus');
+        if (newStatusEl){
+          newStatusEl.className = 'backfill-status ok';
+          newStatusEl.textContent = `✓ ${data.dias_gravados} dia(s) preenchidos (${data.periodo.de} a ${data.periodo.ate})`;
+        }
+      }
+    } catch(e){
+      statusEl.className = 'backfill-status err';
+      statusEl.textContent = 'erro: ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderInsightsPanel(ins){
+  if (!ins){
+    return `<div class="titlebar n1">📋 Insights para Reunião</div>
+      <div class="trend-empty">Calculando a partir do Jira, isso pode levar alguns segundos na primeira vez…</div>`;
+  }
+
+  const dq = ins.data_quality;
+  const dqPct = Math.round(dq.pct_com_resolutiondate * 100);
+  const dqLevel = dq.pct_com_resolutiondate < 0.3 ? 'alerta' : (dq.pct_com_resolutiondate < 0.7 ? 'atencao' : 'ok');
+
+  let html = `<div class="titlebar n1">📋 Insights para Reunião — últimos ${ins.period_days} dias (${ins.total_period} chamados)  |  atualizado em ${ins.generated_at}</div>`;
+
+  html += `<div class="insight-toolbar">
+    <button class="backfill-btn" id="insightsRefreshBtn">🔄 Recalcular agora</button>
+    <span id="insightsRefreshStatus" class="backfill-status"></span>
+  </div>`;
+
+  html += `<div class="insight-alert ${dqLevel}">
+    <div class="insight-alert-icon">⚠️</div>
+    <div>
+      <div class="insight-alert-title">Qualidade de dados: só ${dqPct}% dos chamados do período têm "Data de Resolução" preenchida</div>
+      <div class="insight-alert-sub">${dq.com_resolutiondate} de ${dq.total_periodo} chamados. Sem esse campo, não dá pra medir tempo de resolução com confiança — vale cobrar que o fluxo do Jira grave essa data automaticamente ao fechar um chamado.</div>
+    </div>
+  </div>`;
+
+  // ---- gráfico por dia da semana, em SVG (controle exato de altura,
+  // sem depender de flexbox % — foi isso que quebrou os dias com poucos
+  // ou nenhum chamado antes) ----
+  const wdMax = Math.max(...ins.weekday_volume.map(w => w.count), 1);
+  const wW = 620, wH = 160, wPadB = 26, wPadT = 22;
+  const wInnerH = wH - wPadB - wPadT;
+  const wColW = wW / ins.weekday_volume.length;
+  const wBarW = wColW * 0.5;
+  let wdSvg = `<svg viewBox="0 0 ${wW} ${wH}" style="width:100%; max-width:640px; height:auto; display:block;">`;
+  ins.weekday_volume.forEach((w, i) => {
+    const cx = wColW * i + wColW / 2;
+    const barH = w.count > 0 ? Math.max((w.count / wdMax) * wInnerH, 4) : 0;
+    const barY = wPadT + wInnerH - barH;
+    wdSvg += `<line x1="${cx - wBarW/2}" y1="${wPadT + wInnerH}" x2="${cx + wBarW/2}" y2="${wPadT + wInnerH}" stroke="#D9DEE6" stroke-width="1"/>`;
+    if (w.count > 0){
+      wdSvg += `<rect x="${cx - wBarW/2}" y="${barY}" width="${wBarW}" height="${barH}" rx="2" fill="#0D47A1"/>
+        <text x="${cx}" y="${barY - 6}" text-anchor="middle" font-size="12" font-weight="bold" fill="#1A1A1A" font-family="Arial">${w.count}</text>`;
+    } else {
+      wdSvg += `<text x="${cx}" y="${wPadT + wInnerH - 6}" text-anchor="middle" font-size="11" fill="#9AA3B2" font-family="Arial">0</text>`;
+    }
+    wdSvg += `<text x="${cx}" y="${wH - 6}" text-anchor="middle" font-size="11" fill="#5A5A5A" font-family="Arial" font-weight="bold">${w.day.slice(0,3)}</text>`;
+  });
+  wdSvg += `</svg>`;
+
+  html += `<div class="insight-section">
+    <div class="insight-section-title">📅 Volume de chamados por dia da semana</div>
+    <div class="weekday-chart-wrap">${wdSvg}</div>
+  </div>`;
+
+  // ---- linhas de distribuição: rótulo completo (sem truncar) numa
+  // linha, com a contagem ao lado; barra fina e compacta embaixo ----
+  function ibarRow(label, qtd, pct, max, color){
+    const pctTxt = pct != null ? ` (${Math.round(pct*100)}%)` : '';
+    const widthPct = Math.max((qtd / max) * 100, 3);
+    return `<div class="ibar-row">
+      <div class="ibar-label">${escapeHtml(label)}</div>
+      <div class="ibar-track"><div class="ibar-fill" style="width:${widthPct.toFixed(1)}%; background:${color}"></div></div>
+      <div class="ibar-count">${qtd}${pctTxt}</div>
+    </div>`;
+  }
+
+  html += `<div class="insight-section"><div class="insight-section-title">🏷️ Faixa de idade dos chamados ainda abertos</div>`;
+  const ageMax = Math.max(...ins.age_bands.map(b => b.qtd), 1);
+  ins.age_bands.forEach(b => {
+    html += ibarRow(b.label, b.qtd, b.pct, ageMax, BAND_PILL_COLOR[b.band] || '#0D47A1');
+  });
+  html += `</div>`;
+
+  function distSection(title, items, icon){
+    if (!items.length) return '';
+    const max = Math.max(...items.map(i => i.qtd), 1);
+    let h = `<div class="insight-section"><div class="insight-section-title">${icon} ${title}</div>`;
+    items.forEach(i => {
+      h += ibarRow(i.label, i.qtd, null, max, 'var(--overview)');
+    });
+    return h + `</div>`;
+  }
+
+  function horasSection(title, items, icon, totalHoras){
+    if (!items.length) return '';
+    const max = Math.max(...items.map(i => i.horas), 1);
+    let h = `<div class="insight-section"><div class="insight-section-title">${icon} ${title}
+      <span style="font-weight:normal; color:var(--text-dim); font-size:12px;"> — ${totalHoras}h no total</span></div>`;
+    items.forEach(i => {
+      const widthPct = Math.max((i.horas / max) * 100, 3);
+      h += `<div class="ibar-row">
+        <div class="ibar-label">${escapeHtml(i.label)}</div>
+        <div class="ibar-track"><div class="ibar-fill" style="width:${widthPct.toFixed(1)}%; background:#6C3483"></div></div>
+        <div class="ibar-count">${i.horas}h (${Math.round(i.pct*100)}%)</div>
+      </div>`;
+    });
+    return h + `</div>`;
+  }
+
+  html += distSection('Por responsável', ins.by_responsavel, '👤');
+  html += distSection('Por tipo de chamado', ins.by_tipo, '🏷️');
+  html += distSection('Top clientes no período', ins.by_cliente, '🏢');
+  html += horasSection('Top clientes por horas consumidas', ins.by_cliente_horas, '🕐', ins.total_horas_periodo);
+  html += distSection('Por status atual', ins.by_status, '📌');
+
+  return html;
+}
+
+function renderContractsPanel(data){
+  if (!data){
+    return `<div class="titlebar red">📄 Franquia de Horas por Contrato</div>
+      <div class="trend-empty">Calculando a partir do Jira Assets, isso pode levar alguns segundos na primeira vez…</div>`;
+  }
+
+  let html = `<div class="titlebar red">📄 Franquia de Horas por Contrato — ${data.total_contratos} contrato(s) ativo(s)  |  atualizado em ${data.generated_at}</div>`;
+
+  html += `<div class="insight-toolbar">
+    <button class="backfill-btn" id="contractsRefreshBtn">🔄 Recalcular agora</button>
+    <span id="contractsRefreshStatus" class="backfill-status"></span>
+  </div>`;
+
+  const dqLevel = data.n_estourados > 0 ? 'alerta' : 'ok';
+  html += `<div class="insight-alert ${dqLevel}">
+    <div class="insight-alert-icon">${data.n_estourados > 0 ? '⚠️' : '✅'}</div>
+    <div>
+      <div class="insight-alert-title">${data.n_estourados} contrato(s) com franquia de horas estourada</div>
+      <div class="insight-alert-sub">No total, ${data.total_consumidas}h consumidas de ${data.total_franquia}h contratadas entre todos os contratos ativos.</div>
+    </div>
+  </div>`;
+
+  html += `<div class="insight-section">`;
+  data.contratos.forEach(c => {
+    const pctTxt = c.pct_consumido != null ? `${Math.round(c.pct_consumido*100)}%` : '—';
+    const color = c.estourado ? '#C0392B' : (c.pct_consumido != null && c.pct_consumido > 0.8 ? '#D35400' : '#1E8449');
+    const barPct = c.franquia > 0 ? Math.min((c.consumidas / c.franquia) * 100, 100) : (c.consumidas > 0 ? 100 : 0);
+    html += `<div class="ibar-row">
+      <div class="ibar-label" title="${escapeHtml(c.contrato)}">${escapeHtml(c.cliente)}</div>
+      <div class="ibar-track"><div class="ibar-fill" style="width:${Math.max(barPct,2).toFixed(1)}%; background:${color}"></div></div>
+      <div class="ibar-count">${c.consumidas}h / ${c.franquia}h (${pctTxt})</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  return html;
+}
+
+function wireContractsEvents(){
+  const btn = document.getElementById('contractsRefreshBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const statusEl = document.getElementById('contractsRefreshStatus');
+    btn.disabled = true;
+    statusEl.className = 'backfill-status';
+    statusEl.textContent = 'recalculando…';
+    try{
+      const res = await fetch('/api/contracts?force=1', {cache: 'no-store'});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      lastContracts = data;
+      document.getElementById('panel-contracts').innerHTML = renderContractsPanel(lastContracts);
+      wireContractsEvents();
+      const newStatus = document.getElementById('contractsRefreshStatus');
+      if (newStatus){ newStatus.className = 'backfill-status ok'; newStatus.textContent = '✓ atualizado'; }
+    } catch(e){
+      statusEl.className = 'backfill-status err';
+      statusEl.textContent = 'erro: ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+function wireInsightsEvents(){
+  const btn = document.getElementById('insightsRefreshBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const statusEl = document.getElementById('insightsRefreshStatus');
+    btn.disabled = true;
+    statusEl.className = 'backfill-status';
+    statusEl.textContent = 'recalculando…';
+    try{
+      const res = await fetch('/api/insights?force=1', {cache: 'no-store'});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      lastInsights = data;
+      document.getElementById('panel-insights').innerHTML = renderInsightsPanel(lastInsights);
+      wireInsightsEvents();
+      const newStatus = document.getElementById('insightsRefreshStatus');
+      if (newStatus){ newStatus.className = 'backfill-status ok'; newStatus.textContent = '✓ atualizado'; }
+    } catch(e){
+      statusEl.className = 'backfill-status err';
+      statusEl.textContent = 'erro: ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+function render(DATA){
+  lastData = DATA;
+  const content = document.getElementById('content');
+
+  let html = `<div class="panel active" id="panel-overview">${renderOverview(DATA)}</div>`;
+  BAND_ORDER.forEach(band => {
+    html += `<div class="panel" id="panel-${band}">${renderBandPanel(DATA, band)}</div>`;
+  });
+  html += `<div class="panel" id="panel-n1">${renderBandPanel(DATA, 'n1')}</div>`;
+  html += `<div class="panel" id="panel-trend">${renderTrendPanel(lastHistory)}</div>`;
+  html += `<div class="panel" id="panel-insights">${renderInsightsPanel(lastInsights)}</div>`;
+  html += `<div class="panel" id="panel-contracts">${renderContractsPanel(lastContracts)}</div>`;
+
+  content.innerHTML = html;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + currentTab).classList.add('active');
+  wireBandFilterEvents();
+  wireTrendEvents();
+  wireInsightsEvents();
+  wireContractsEvents();
+}
+
+document.getElementById('tabbar').addEventListener('click', (e) => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  currentTab = tab.dataset.tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-' + currentTab);
+  if (panel) panel.classList.add('active');
+});
+
+async function loadData(manual){
+  const dot = document.getElementById('liveDot');
+  const text = document.getElementById('liveText');
+  const btn = document.getElementById('refreshBtn');
+  const prevReportDate = lastData ? lastData.report_date : null;
+  if (manual){ btn.disabled = true; btn.classList.add('spinning'); }
+  try{
+    const url = manual ? '/api/data?force=1' : '/api/data';
+    const res = await fetch(url, {cache: 'no-store'});
+    if (!res.ok){
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || ('HTTP ' + res.status));
+    }
+    const data = await res.json();
+
+    // busca o histórico em paralelo; se falhar, não impede o resto do
+    // dashboard de funcionar — só a aba de Tendência fica sem dados.
+    try{
+      const histRes = await fetch('/api/history?days=30', {cache: 'no-store'});
+      if (histRes.ok) lastHistory = await histRes.json();
+    } catch(histErr){ /* aba de Tendência mostra o estado vazio, sem quebrar o resto */ }
+
+    // os insights de reunião são mais pesados (30 dias de Jira) e o
+    // servidor já cacheia por 30 min — busca só uma vez por sessão,
+    // não a cada poll de 60s. O botão "Recalcular agora" força de novo.
+    if (!lastInsights){
+      try{
+        const insRes = await fetch('/api/insights', {cache: 'no-store'});
+        if (insRes.ok) lastInsights = await insRes.json();
+      } catch(insErr){ /* aba de Insights mostra o estado de carregando */ }
+    }
+
+    // mesma lógica pros contratos (Jira Assets) — busca só uma vez por sessão
+    if (!lastContracts){
+      try{
+        const conRes = await fetch('/api/contracts', {cache: 'no-store'});
+        if (conRes.ok) lastContracts = await conRes.json();
+      } catch(conErr){ /* aba de Contratos mostra o estado de carregando */ }
+    }
+
+    render(data);
+    dot.className = 'live-dot';
+    const sameAsBefore = manual && prevReportDate && prevReportDate === data.report_date;
+    text.textContent = sameAsBefore
+      ? `sem novidades no Jira (checado às ${data.report_date.split(' ')[1] || ''})`
+      : `atualizado às ${data.report_date.split(' ')[1] || ''}`;
+  } catch(e){
+    if (!lastData){
+      document.getElementById('content').innerHTML =
+        `<div class="error-box">Não foi possível carregar os dados: ${e.message}</div>`;
+    }
+    dot.className = 'live-dot err';
+    text.textContent = 'erro ao atualizar (mantendo última versão)';
+  } finally {
+    if (manual){ btn.disabled = false; btn.classList.remove('spinning'); }
+  }
+}
+
+document.getElementById('refreshBtn').addEventListener('click', () => loadData(true));
+
+loadData();
+setInterval(loadData, 60000); // repolla a cada 60s no navegador
+</script>
+</body>
+</html>
