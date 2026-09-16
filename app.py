@@ -31,6 +31,7 @@ from functools import wraps
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 from jira_sync import fetch_dashboard_data
+from jira_client import JiraClient
 import history_store
 import insights
 
@@ -246,6 +247,47 @@ def api_insights():
         return jsonify({"error": error or "Sem dados ainda"}), 503
 
     resp = jsonify(data)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/api/debug/assets")
+@require_auth
+def api_debug_assets():
+    """Rota temporária de diagnóstico: testa se dá pra ler um objeto do
+    Jira Assets (CMDB) com as credenciais já configuradas (e-mail + API
+    token), tentando os dois formatos de API conhecidos. Remover depois
+    que descobrirmos qual funciona (ou se nenhuma funciona)."""
+    workspace_id = request.args.get("workspace_id", "")
+    object_id = request.args.get("object_id", "")
+    if not workspace_id or not object_id:
+        return jsonify({
+            "error": "informe ?workspace_id=...&object_id=... na URL",
+            "exemplo": "/api/debug/assets?workspace_id=67cc6f9e-3376-46e9-b05b-4454d7f219ce&object_id=1017",
+        }), 400
+
+    client = JiraClient(
+        base_url=os.environ["JIRA_BASE_URL"],
+        email=os.environ["JIRA_EMAIL"],
+        api_token=os.environ["JIRA_API_TOKEN"],
+    )
+
+    result: dict = {}
+    try:
+        result["v1_nova_api"] = client.get_assets_object_v1(workspace_id, object_id)
+        result["v1_nova_api_status"] = "OK"
+    except Exception as e:
+        result["v1_nova_api_status"] = "FALHOU"
+        result["v1_nova_api_erro"] = str(e)
+
+    try:
+        result["legacy_insight_api"] = client.get_assets_object_legacy(object_id)
+        result["legacy_insight_api_status"] = "OK"
+    except Exception as e:
+        result["legacy_insight_api_status"] = "FALHOU"
+        result["legacy_insight_api_erro"] = str(e)
+
+    resp = jsonify(result)
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
