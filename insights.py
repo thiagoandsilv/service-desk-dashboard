@@ -45,7 +45,7 @@ def _parse_dt(value: str | None) -> dt.datetime | None:
     return dt.datetime.strptime(value[:19], "%Y-%m-%dT%H:%M:%S")
 
 
-def build_insights(days: int = 30, today: dt.date | None = None) -> dict:
+def build_insights(today: dt.date | None = None) -> dict:
     base_url = os.environ["JIRA_BASE_URL"]
     email = os.environ["JIRA_EMAIL"]
     token = os.environ["JIRA_API_TOKEN"]
@@ -53,8 +53,11 @@ def build_insights(days: int = 30, today: dt.date | None = None) -> dict:
 
     client = JiraClient(base_url=base_url, email=email, api_token=token)
 
-    jql = (f"project = {project} AND "
-           f"(statusCategory != Done OR resolutiondate >= -{days}d)")
+    # "mês atual até hoje": usa startOfMonth() nativo do Jira, então isso
+    # sempre reflete a data real de quando o servidor rodar — sem precisar
+    # calcular nada aqui. No dia 1 do mês seguinte, a janela reinicia
+    # sozinha.
+    jql = f"project = {project} AND created >= startOfMonth()"
 
     issues = list(client.search(
         jql,
@@ -63,6 +66,8 @@ def build_insights(days: int = 30, today: dt.date | None = None) -> dict:
         max_pages=100, page_size=100))
 
     today = today or dt.date.today()
+    inicio_mes = today.replace(day=1)
+    period_days = (today - inicio_mes).days + 1
 
     rows = []
     for issue in issues:
@@ -126,7 +131,8 @@ def build_insights(days: int = 30, today: dt.date | None = None) -> dict:
 
     return {
         "generated_at": dt.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        "period_days": days,
+        "period_days": period_days,
+        "period_label": f"{inicio_mes.strftime('%d/%m')} a {today.strftime('%d/%m')}",
         "total_period": total,
         "total_ainda_abertos": len(ainda_abertos),
         "data_quality": {
