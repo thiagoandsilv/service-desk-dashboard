@@ -692,7 +692,7 @@ function renderInsightsPanel(ins){
   const dqPct = Math.round(dq.pct_com_resolutiondate * 100);
   const dqLevel = dq.pct_com_resolutiondate < 0.3 ? 'alerta' : (dq.pct_com_resolutiondate < 0.7 ? 'atencao' : 'ok');
 
-  let html = `<div class="titlebar n1">📋 Insights para Reunião — últimos ${ins.period_days} dias (${ins.total_period} chamados)  |  atualizado em ${ins.generated_at}</div>`;
+  let html = `<div class="titlebar n1">📋 Insights para Reunião — mês atual: ${ins.period_label} (${ins.period_days} dia${ins.period_days===1?'':'s'}, ${ins.total_period} chamados)  |  atualizado em ${ins.generated_at}</div>`;
 
   html += `<div class="insight-toolbar">
     <button class="backfill-btn" id="insightsRefreshBtn">🔄 Recalcular agora</button>
@@ -801,6 +801,10 @@ function renderContractsPanel(data){
   html += `<div class="insight-toolbar">
     <button class="backfill-btn" id="contractsRefreshBtn">🔄 Recalcular agora</button>
     <span id="contractsRefreshStatus" class="backfill-status"></span>
+  </div>`;
+
+  html += `<div class="filter-bar" style="font-size:12px; color:var(--text-dim);">
+    ℹ️ As horas consumidas/restantes são mantidas automaticamente pelo controle interno da Accerte (Jira Assets) e já se referem ao mês corrente — reiniciam sozinhas no início de cada mês.
   </div>`;
 
   const dqLevel = data.n_estourados > 0 ? 'alerta' : 'ok';
