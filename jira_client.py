@@ -105,17 +105,19 @@ class JiraClient:
         return objects
 
     def debug_aql_raw_meta(self, workspace_id: str, aql: str,
-                            max_results: int = 100, page: int = 1) -> dict[str, Any]:
+                            max_results: int = 100, start_at: int = 0) -> dict[str, Any]:
         """Diagnóstico temporário: faz UMA chamada e devolve tudo, exceto
-        a lista 'values' (que é grande), pra descobrir os nomes reais dos
-        campos de paginação na resposta."""
+        a lista 'values' completa (só as chaves dos objetos), pra
+        conferir se start_at realmente muda o resultado."""
         url = f"https://api.atlassian.com/jsm/assets/workspace/{workspace_id}/v1/object/aql"
-        body = {"qlQuery": aql, "page": page, "resultsPerPage": max_results}
+        body = {"qlQuery": aql, "startAt": start_at, "maxResults": max_results}
         resp = self._session.post(url, json=body, timeout=self.timeout)
         resp.raise_for_status()
         data = resp.json()
+        values = data.get("values", [])
         meta = {k: v for k, v in data.items() if k != "values"}
-        meta["values_count_nesta_pagina"] = len(data.get("values", []))
+        meta["values_count_nesta_pagina"] = len(values)
+        meta["object_keys_nesta_pagina"] = [v.get("objectKey") or v.get("id") for v in values]
         return meta
 
     # ------------------------------------------------------------------
