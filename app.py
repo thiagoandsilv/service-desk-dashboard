@@ -367,6 +367,32 @@ def api_debug_assets_aql():
     return resp
 
 
+@app.route("/api/debug/assets-aql-meta")
+@require_auth
+def api_debug_assets_aql_meta():
+    """Debug temporário: mostra os metadados de paginação da resposta
+    crua (sem os objetos), pra descobrir os nomes certos dos campos."""
+    workspace_id = request.args.get("workspace_id", "")
+    aql = request.args.get("aql", 'objectType = "Contrato sustentação"')
+    page = int(request.args.get("page", "1"))
+    if not workspace_id:
+        return jsonify({"error": "informe ?workspace_id=..."}), 400
+
+    client = JiraClient(
+        base_url=os.environ["JIRA_BASE_URL"],
+        email=os.environ["JIRA_EMAIL"],
+        api_token=os.environ["JIRA_API_TOKEN"],
+    )
+    try:
+        meta = client.debug_aql_raw_meta(workspace_id, aql, page=page)
+        resp = jsonify({"status": "OK", "meta": meta})
+    except Exception as e:
+        resp = jsonify({"status": "FALHOU", "erro": str(e)})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+
 # Inicia o refresh em background assim que o processo sobe (Gunicorn ou
 # `python app.py`), para o cache já vir quente na primeira visita.
 _refresher_thread = threading.Thread(target=_background_refresher, daemon=True)
