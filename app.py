@@ -34,6 +34,7 @@ from jira_sync import fetch_dashboard_data
 from jira_client import JiraClient
 import history_store
 import insights
+import contracts
 
 app = Flask(__name__, static_folder="static")
 
@@ -56,6 +57,10 @@ _refresh_in_progress = threading.Lock()
 _insights_lock = threading.Lock()
 _insights_cache = {"data": None, "fetched_at": 0.0, "error": None}
 _insights_refresh_in_progress = threading.Lock()
+
+_contracts_lock = threading.Lock()
+_contracts_cache = {"data": None, "fetched_at": 0.0, "error": None}
+_contracts_refresh_in_progress = threading.Lock()
 
 
 def _check_credentials(user: str, password: str) -> bool:
@@ -125,6 +130,27 @@ def _refresh_insights_cache():
 def _background_insights_refresher():
     while True:
         _refresh_insights_cache()
+        time.sleep(INSIGHTS_REFRESH_SECONDS)
+
+
+def _refresh_contracts_cache():
+    with _contracts_refresh_in_progress:
+        try:
+            data = contracts.build_contracts()
+            with _contracts_lock:
+                _contracts_cache["data"] = data
+                _contracts_cache["fetched_at"] = time.time()
+                _contracts_cache["error"] = None
+        except Exception as e:
+            traceback.print_exc()
+            with _contracts_lock:
+                _contracts_cache["error"] = str(e)
+
+
+def _background_contracts_refresher():
+    while True:
+        _refresh_contracts_cache()
+        # contratos mudam pouco — usa o mesmo intervalo longo dos insights
         time.sleep(INSIGHTS_REFRESH_SECONDS)
 
 
@@ -251,6 +277,32 @@ def api_insights():
     return resp
 
 
+@app.route("/api/contracts")
+@require_auth
+def api_contracts():
+    force = request.args.get("force") == "1"
+
+    with _contracts_lock:
+        data = _contracts_cache["data"]
+        error = _contracts_cache["error"]
+        fetched_at = _contracts_cache["fetched_at"]
+
+    should_force = force and (time.time() - fetched_at) >= FORCE_REFRESH_COOLDOWN
+    if (data is None and error is None) or should_force:
+        _refresh_contracts_cache()
+        with _contracts_lock:
+            data = _contracts_cache["data"]
+            error = _contracts_cache["error"]
+            fetched_at = _contracts_cache["fetched_at"]
+
+    if data is None:
+        return jsonify({"error": error or "Sem dados ainda"}), 503
+
+    resp = jsonify(data)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.route("/api/debug/assets")
 @require_auth
 def api_debug_assets():
@@ -322,6 +374,9 @@ _refresher_thread.start()
 
 _insights_refresher_thread = threading.Thread(target=_background_insights_refresher, daemon=True)
 _insights_refresher_thread.start()
+
+_contracts_refresher_thread = threading.Thread(target=_background_contracts_refresher, daemon=True)
+_contracts_refresher_thread.start()
 
 
 if __name__ == "__main__":
